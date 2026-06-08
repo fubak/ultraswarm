@@ -43,17 +43,18 @@ Global precondition: every invocation string below assumes the current working d
 - Smoke test: **PASS** — created `hello-grok.txt` with exact content, unattended.
 - Quirks:
   - `-p/--single <PROMPT>` is the headless one-shot form (prints response to stdout and exits). `--prompt-file <PATH>` accepts a file directly, so `grok --always-approve --prompt-file .ultraswarm-prompt.txt` is an equivalent that avoids shell quoting entirely.
-  - `--always-approve` is the named auto-approve flag.
+  - `--always-approve` is the named auto-approve flag, and it is **REQUIRED** for unattended file writes. Verified 2026-06-08: bare `grok -p "<prompt>"` (no `--always-approve`) prints "Creating `probe.txt`…" but writes **no file** — in headless mode the file-write tool isn't approved, so grok narrates the edit without performing it. With `--always-approve -p` the same prompt writes the file (exit 0). Do not drop `--always-approve`.
   - **Noisy**: interleaves many `ERROR worker quit with fatal: Transport channel closed, when Auth(AuthorizationRequired)` log lines into output even on successful runs (background leader/telemetry workers). Do not treat ERROR lines in output as task failure — verify via artifacts (files/commits), not log grep.
   - Honors `--cwd <CWD>` if running from a different directory.
 
 ## agy (enabled)
 
 - Version: `1.0.6`
-- Invocation: `agy --print-timeout 15m -p "$(cat .ultraswarm-prompt.txt)"`
+- Invocation: `agy --print-timeout 15m --prompt "$(cat .ultraswarm-prompt.txt)"`
 - Smoke test: **PASS** — created `hello-agy.txt` with exact content, unattended, with **no permission flag at all** (plain `-p`/`--print` performed file writes without prompting).
 - Quirks:
-  - `-p/--print` runs a single prompt non-interactively. Default `--print-timeout` is **5m — below the 10-min worker budget**, which is why the canonical invocation above bakes in `--print-timeout 15m`. Do not drop it when copying.
+  - `--prompt`, `-p`, and `--print` are **the same flag** (per `agy --help`: `--prompt` is "Alias for --print"; `-p` is "Short alias for --print"). The canonical invocation uses `--prompt`; re-verified 2026-06-08 (`agy --print-timeout 15m --prompt "<prompt>"` wrote the file unattended, exit 0).
+  - Default `--print-timeout` is **5m — below the 10-min worker budget**, which is why the canonical invocation bakes in `--print-timeout 15m`. Do not drop it when copying.
   - `--dangerously-skip-permissions` is agy's named auto-approve flag, but it was NOT verified here (this environment's policy forbids `--dangerously-*` flags) and was not needed for file writes. If a worker run stalls on a permission request in print mode, that flag is the documented escape hatch — decide policy at integration time.
   - No `--cwd` flag; must `cd` into the work directory first.
 

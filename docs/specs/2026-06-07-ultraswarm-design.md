@@ -61,7 +61,7 @@ Maintained as a table inside the skill. Each entry: invocation command, auto-app
 | gemini | `gemini --yolo -p "$(cat .ultraswarm-prompt.txt)"` | Frontend, UI, CSS, components | verified |
 | droid | `droid exec "$(cat .ultraswarm-prompt.txt)"` (requires a Factory subscription) | General full-stack implementation, refactoring | enabled (help-verified; not smoke-tested without a plan) |
 | grok | `grok --always-approve -p "$(cat .ultraswarm-prompt.txt)"` | Tests, refactors, general | verified |
-| agy | `agy --print-timeout 15m -p "$(cat .ultraswarm-prompt.txt)"` | Docs, boilerplate, general | verified |
+| agy | `agy --print-timeout 15m --prompt "$(cat .ultraswarm-prompt.txt)"` | Docs, boilerplate, general | verified |
 | opencode | `opencode run --agent build -m "xai/grok-build-0.1" "$(cat .ultraswarm-prompt.txt)"` | Junior tier: boilerplate, lint/type fixes, simple tests, JSDoc | verified |
 
 - **Amendment (2026-06-07):** registry expanded to six workers — droid and opencode added by user request 2026-06-07. All invocations verified and recorded in `docs/notes/cli-verification.md` (source of truth, including quirks).

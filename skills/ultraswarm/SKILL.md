@@ -21,7 +21,7 @@ The table below is the **built-in default roster**. The user's config (next sect
 | gemini | `gemini --yolo -p "$(cat .ultraswarm-prompt.txt)"` | Frontend, UI, CSS, components | 10 min |
 | droid | `droid exec "$(cat .ultraswarm-prompt.txt)"` — requires an active Factory subscription. Help-verified, not smoke-tested here (the test machine had no plan; `droid exec` returned 0 turns / 0 tokens, consistent with no model access). On a subscribed machine the Phase 0 write probe confirms it before routing. | General full-stack implementation, refactoring | 10 min |
 | grok | `grok --always-approve -p "$(cat .ultraswarm-prompt.txt)"` | Tests, refactors, general | 10 min |
-| agy | `agy --print-timeout 15m -p "$(cat .ultraswarm-prompt.txt)"` | Docs, boilerplate, general | 10 min |
+| agy | `agy --print-timeout 15m --prompt "$(cat .ultraswarm-prompt.txt)"` | Docs, boilerplate, general | 10 min |
 | opencode | `opencode run --agent build -m "xai/grok-build-0.1" "$(cat .ultraswarm-prompt.txt)"` | Junior tier: boilerplate, lint/type fixes, simple tests, JSDoc | 10 min |
 
 **Registry quirks** (verified 2026-06-07; details in docs/notes/cli-verification.md):
