@@ -27,40 +27,46 @@ The built-in `ultracode` workflow is powerful because of the `Workflow` tool und
   ├─ Phase 0 (inline Claude, pre-Workflow)
   │    explore codebase → decompose into task list → user confirms plan
   │
-  └─ Workflow script (authored per-task by Claude)
-       ├─ Phase 1: Implement   pipeline() over tasks
-       │     each agent() = thin Claude wrapper:
-       │       create worktree → run assigned CLI via Bash →
-       │       build/typecheck/test in worktree →
-       │       return schema-validated JSON
-       │     high-risk tasks: fan out to 2–3 CLIs in separate worktrees
-       │
-       ├─ Phase 2: QA          pipelined (starts per-task as Phase 1 finishes)
-       │     routine: mechanical gates + 1 Claude diff-review agent
-       │     high-risk: judge panel picks winner → 3-lens adversarial verify
-       │     fail → retry same CLI w/ feedback (max 2) → reassign CLI → Claude fixes
-       │
-       ├─ Phase 3: Merge       sequential, Claude-only
-       │     apply approved worktree diffs one at a time, full gate after each
-       │
-       └─ Phase 4: Final verify & report
-             full suite + coverage, per-task summary table, loud failure list
+  ├─ Workflow script (authored per-task by Claude) — covers Implement + QA,
+  │  returns {approved, failed}
+  │    ├─ Phase 1: Implement   pipeline() over tasks
+  │    │     each agent() = thin Claude wrapper:
+  │    │       create worktree → run assigned CLI via Bash →
+  │    │       build/typecheck/test in worktree →
+  │    │       return schema-validated JSON
+  │    │     high-risk tasks: fan out to 2–3 CLIs in separate worktrees
+  │    │
+  │    └─ Phase 2: QA          pipelined (starts per-task as Phase 1 finishes)
+  │          routine: mechanical gates + 1 Claude diff-review agent
+  │          high-risk: judge panel picks winner → 3-lens adversarial verify
+  │          fail → retry same CLI w/ feedback (max 2) → reassign CLI → Claude fixes
+  │
+  ├─ Phase 3: Merge       (inline, orchestrator Claude, after the Workflow returns)
+  │     sequential, Claude-only — apply approved worktree diffs one at a time,
+  │     full gate after each
+  │
+  └─ Phase 4: Final verify & report   (inline, orchestrator Claude)
+        full suite + coverage, per-task summary table, loud failure list
 ```
+
+> **Amendment (implementation plan):** Phases 3–4 run inline in the orchestrator after the Workflow returns — the Workflow covers only Implement + QA and returns `{approved, failed}`. Conflict resolution (Rule 7 judgment) and user visibility are better in the main loop.
 
 ## CLI Worker Registry
 
 Maintained as a table inside the skill. Each entry: invocation command, auto-approve flags, specialty, timeout, health check.
 
-| CLI | Invocation | Specialty | Status |
+| CLI | Invocation (run inside the worktree) | Specialty | Status |
 |---|---|---|---|
-| codex | `codex exec --full-auto "<prompt>"` | Backend, logic, algorithms, debugging | known |
-| gemini | `gemini --yolo "<prompt>"` | Frontend, UI, CSS, components | known |
-| grok | TBV — verify via `grok --help` at implementation | Tests, refactors, general | **to verify** |
-| agy | TBV — verify via `agy --help` at implementation | Docs, boilerplate, general | **to verify** |
+| codex | `codex exec --full-auto "$(cat .ultraswarm-prompt.txt)"` | Backend, logic, algorithms, debugging | verified |
+| gemini | `gemini --yolo -p "$(cat .ultraswarm-prompt.txt)"` | Frontend, UI, CSS, components | verified |
+| droid | **DISABLED — not authenticated (FACTORY_API_KEY/login required)**; excluded from routing; re-verify steps live in docs/notes/cli-verification.md | General full-stack implementation, refactoring | **disabled** |
+| grok | `grok --always-approve -p "$(cat .ultraswarm-prompt.txt)"` | Tests, refactors, general | verified |
+| agy | `agy --print-timeout 15m -p "$(cat .ultraswarm-prompt.txt)"` | Docs, boilerplate, general | verified |
+| opencode | `opencode run --agent build -m "xai/grok-build-0.1" "$(cat .ultraswarm-prompt.txt)"` | Junior tier: boilerplate, lint/type fixes, simple tests, JSDoc | verified |
 
+- **Amendment (2026-06-07):** registry expanded to six workers — droid and opencode added by user request 2026-06-07. All invocations verified and recorded in `docs/notes/cli-verification.md` (source of truth, including quirks).
 - **Health check:** Phase 0 runs `<cli> --version` for every registered CLI. A missing or broken CLI is dropped from routing and reported loudly — never silently skipped.
 - **Timeouts:** per-CLI timeout (default 10 min, configurable per task in the registry). On timeout: kill, count as a failed attempt, enter the fail path.
-- The two TBV rows are an implementation-plan task, not a runtime concern: flags get verified once and recorded in the registry before the skill ships.
 
 ## Phase 0 — Decompose (inline Claude)
 
@@ -81,8 +87,9 @@ Risk classification: a task is **high** if it touches auth/security/payments, ch
 
 Each implementation `agent()` is a **thin wrapper** Claude subagent whose prompt instructs it to:
 
-1. Create a worktree: `git worktree add <repo>/.ultraswarm/wt-<taskid>-<cli> -b ultraswarm/<taskid>-<cli>`
-2. Run the assigned CLI inside the worktree via Bash with its auto-approve flags and the self-contained prompt.
+1. Create a worktree: `git worktree add ~/worktrees/<reponame>-us-<taskid>-<cli> -b ultraswarm/<taskid>-<cli>`
+   *(Amendment: worktrees live in `~/worktrees/`, not `<repo>/.ultraswarm/` — nested worktrees pollute `git status` and test globs in the main tree.)*
+2. Write the self-contained prompt to `<worktree>/.ultraswarm-prompt.txt`, then run the assigned CLI inside the worktree via Bash with its auto-approve flags as `<cli> ... "$(cat .ultraswarm-prompt.txt)"` — multi-line prompts as direct shell arguments break quoting across the different CLIs.
 3. After the CLI exits: run build/typecheck/tests inside the worktree.
 4. Return schema-validated JSON:
    ```json
