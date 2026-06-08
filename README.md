@@ -90,7 +90,7 @@ If you just want to fan a couple of CLIs at independent subtasks with minimal ce
   | grok | [xAI Grok CLI](https://x.ai/cli) (standalone `grok` binary on `PATH`) | `grok login` (OAuth via auth.x.ai) |
   | agy | [Google Antigravity](https://antigravity.google) CLI (standalone `agy` binary) | Sign in to Antigravity (Google account) |
   | [droid](https://factory.ai/product/cli) | Factory CLI (`droid`) | Sign in to Factory (requires an active subscription) |
-  | [opencode](https://github.com/sst/opencode) | `npm i -g opencode-ai` | provider key (e.g. xAI) |
+  | [opencode](https://opencode.ai/docs/#install) | `npm i -g opencode-ai` (see install docs) | provider key (e.g. xAI) |
 
   You don't need all six. The skill health-checks and write-probes whatever is installed and routes only to the ones that pass. See [Limitations & status](#limitations--status) for which CLIs are currently verified.
 
