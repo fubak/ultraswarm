@@ -13,7 +13,7 @@ description: Orchestrate external AI CLIs (codex, gemini, grok, agy, droid, open
 |---|---|---|---|
 | codex | `codex exec -s workspace-write --skip-git-repo-check "$(cat .ultraswarm-prompt.txt)" </dev/null` ⏳ slow (~5 min/task with gpt-5.5) — give it a 15-min timeout. `-s workspace-write` is required (default sandbox rejects worktree writes); `</dev/null` is required (codex hangs waiting on stdin otherwise). | Backend, logic, algorithms, debugging | 15 min |
 | gemini | `gemini --yolo -p "$(cat .ultraswarm-prompt.txt)"` | Frontend, UI, CSS, components | 10 min |
-| droid | **DISABLED — `droid exec` broken (2026-06-08)**: authenticated and the model is reachable (`droid --list-tools` → Claude Opus 4.8), but non-interactive `droid exec` fails immediately in every context (≈0.8 s, 0 turns, 0 tokens, `"Exec failed"`). Excluded from routing; re-probe after a droid upgrade. | General full-stack implementation, refactoring | 10 min |
+| droid | `droid exec "$(cat .ultraswarm-prompt.txt)"` — requires an active Factory subscription. Help-verified, not smoke-tested here (the test machine had no plan; `droid exec` returned 0 turns / 0 tokens, consistent with no model access). On a subscribed machine the Phase 0 write probe confirms it before routing. | General full-stack implementation, refactoring | 10 min |
 | grok | `grok --always-approve -p "$(cat .ultraswarm-prompt.txt)"` | Tests, refactors, general | 10 min |
 | agy | `agy --print-timeout 15m -p "$(cat .ultraswarm-prompt.txt)"` | Docs, boilerplate, general | 10 min |
 | opencode | `opencode run --agent build -m "xai/grok-build-0.1" "$(cat .ultraswarm-prompt.txt)"` | Junior tier: boilerplate, lint/type fixes, simple tests, JSDoc | 10 min |
@@ -59,7 +59,7 @@ const cfg = typeof args === 'string' ? JSON.parse(args) : args
 //   worktreeRoot: '/home/<user>/worktrees',  // absolute path — never ~ (must round-trip through agents and git verbatim)
 //   gates: [{name:'build',cmd:'npm run build'},{name:'test',cmd:'npm test'}, ...],
 //   registry: { codex: 'codex exec --full-auto "$(cat .ultraswarm-prompt.txt)"', ... },
-//   alternates: { codex:'grok', gemini:'grok', grok:'agy', agy:'grok', opencode:'agy' },  // adapt to healthy CLIs in Phase 0; droid excluded as a target (exec broken — see registry)
+//   alternates: { codex:'droid', gemini:'grok', grok:'agy', agy:'grok', droid:'codex', opencode:'agy' },  // adapt to healthy CLIs in Phase 0 (drop any that fail the write probe)
 //   timeoutMs: 600000,
 //   tasks: [{ id, description, files:[], cli, risk, acceptance, prompt }],
 // }

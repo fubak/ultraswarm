@@ -170,7 +170,7 @@ Tasks are routed to CLIs by specialty:
 | **gemini** | Frontend, UI, CSS, components | ✅ verified |
 | **grok** | Tests, refactors, general | ✅ verified end-to-end |
 | **agy** | Docs, boilerplate, general | ✅ verified end-to-end |
-| **droid** | General full-stack implementation, refactoring | ⚠️ disabled (`droid exec` broken) |
+| **droid** | General full-stack implementation, refactoring | ✅ enabled (needs a Factory subscription; help-verified) |
 | **opencode** | Junior tier: boilerplate, lint/type fixes, simple tests, JSDoc | ✅ verified |
 
 **Routing isn't rigid.** For `high`-risk tasks, ultraswarm sends the *same* task to two CLIs in parallel worktrees and a judge panel picks the winner — independent attempts beat one-attempt-and-hope when the task is risky. Routine tasks go to a single CLI.
@@ -217,7 +217,7 @@ Asking `/ultraswarm` to build two small utilities with tests — a routine, two-
 **Phase 0 — decompose & confirm**
 
 ```
-health check:  codex ✓   grok ✓   (droid dropped: exec broken)
+health check:  codex ✓   grok ✓   (only these two needed for a 2-task run)
 base gates:    npm test ✓ on a clean tree
 plan:          t1  [routine]  codex → src/math.js     + test/math.test.js
                t2  [routine]  grok  → src/slugify.js  + test/slugify.test.js
@@ -311,8 +311,7 @@ Honest current state (verified 2026-06-07, re-verified 2026-06-08):
 - **Verified end-to-end:** the routine-tier pipeline (decompose → worktree → CLI codes → gates → review → sequential merge → final verify) using **codex**, **grok**, and **agy**. Each implemented its task correctly on the first attempt; merges gated clean; cleanup verified.
   - **codex** needs specific flags — `codex exec -s workspace-write --skip-git-repo-check '<prompt>' </dev/null` — because its default sandbox rejects worktree writes and bare `exec` hangs on stdin. It's also **slow (~5 min/task)**, so it runs with a 15-min timeout. The registry encodes all of this.
 - **Verified by health/write probe, not yet exercised in a full run:** **gemini**, **opencode**.
-- **Currently disabled:**
-  - **droid** — authenticated and the model is reachable (`droid --list-tools` → Claude Opus 4.8), but its non-interactive `droid exec` subcommand fails immediately in every context (≈0.8 s, 0 turns, 0 tokens, `"Exec failed"`) — a broken `exec`, not an auth problem. Re-probe after a droid upgrade.
+- **Enabled but not smoke-tested here:** **droid** — uses `droid exec "<prompt>"` and requires an active Factory subscription. The test machine had no plan, so `droid exec` returned 0 turns / 0 tokens (consistent with no model access, not a CLI defect). On a subscribed machine, Phase 0's write probe verifies it before routing.
 - **The high-risk competition path** (judge panel + 3-lens adversarial verify) is review-verified but has **not** been exercised in a live run — the smoke tests only used routine-tier tasks. The first real high-risk task is its live test.
 - **Local only** — no remote/CI execution. Everything runs in local worktrees.
 

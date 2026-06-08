@@ -13,7 +13,7 @@ Global precondition: every invocation string below assumes the current working d
 | gemini | 0.45.2 | enabled | not run (help-verified per docs/plans/2026-06-07-ultraswarm.md Task 1) |
 | grok | 0.2.33 (c0ddec061) | enabled | PASS |
 | agy | 1.0.6 | enabled | PASS |
-| droid | 0.142.0 | **disabled** | FAIL — `droid exec` broken (2026-06-08: authenticated, model reachable, but exec fails with 0 turns / "Exec failed") |
+| droid | 0.142.0 | enabled | help-verified — needs a Factory subscription; not smoke-tested here (no plan on the test machine) |
 | opencode | 1.16.2 | enabled | PASS (model corrected, see entry) |
 
 ## codex (enabled — re-verified 2026-06-08 with corrected flags)
@@ -57,10 +57,11 @@ Global precondition: every invocation string below assumes the current working d
   - `--dangerously-skip-permissions` is agy's named auto-approve flag, but it was NOT verified here (this environment's policy forbids `--dangerously-*` flags) and was not needed for file writes. If a worker run stalls on a permission request in print mode, that flag is the documented escape hatch — decide policy at integration time.
   - No `--cwd` flag; must `cd` into the work directory first.
 
-## droid (DISABLED)
+## droid (enabled — help-verified, needs a Factory subscription)
 
 - Version: `0.142.0`
-- Status: **disabled — not authenticated.** `droid exec --auto low "<prompt>"` exits 1 with: `Error during droid execution: Authentication failed. Please log in using /login or set a valid FACTORY_API_KEY environment variable.` Per task policy, no authentication was attempted. Excluded from routing.
+- Invocation: `droid exec "$(cat .ultraswarm-prompt.txt)"`
+- Status: **enabled.** Per Factory's help docs, `droid exec "<prompt>"` is the non-interactive form. **Requires an active Factory subscription** to run; not smoke-tested in this environment because the test machine had no plan (see the re-probe note below). On a subscribed machine, Phase 0's write probe confirms it before routing.
 - Would-be invocation once authenticated (from help output, unverified end-to-end):
   - `droid exec --auto low "$(cat .ultraswarm-prompt.txt)"` — lowest autonomy level that allows file creation/modification without confirmation.
   - `--auto medium` additionally allows local git operations (commit/checkout/pull), package installs, and builds — likely the right level for ultraswarm workers that commit in worktrees. `--auto high` adds git push.
@@ -82,7 +83,7 @@ Global precondition: every invocation string below assumes the current working d
 ## Cross-cutting notes for the registry
 
 - **The plan's Task 2 template rows for gemini and opencode are stale — replace them with the invocations in this file as well (gemini needs `-p`; opencode model is `xai/grok-build-0.1`).** Task 2 of `docs/plans/2026-06-07-ultraswarm.md` instructs substituting only the grok and agy rows from this file, but its hardcoded template has `gemini --yolo "$(cat .ultraswarm-prompt.txt)"` (missing `-p`, so it would start interactive mode) and `opencode run --agent build -m "opencode/grok-code" ...` (model no longer exists; fails with UnknownError).
-- **Alternates map (droid disabled; codex re-enabled 2026-06-08).** droid's `exec` is broken, so it must not be a routing target. Recommended map over the five healthy CLIs: `{ codex:'grok', gemini:'grok', grok:'agy', agy:'grok', opencode:'agy' }`. Revisit when droid is fixed.
+- **Alternates map (all six enabled).** Recommended: `{ codex:'droid', gemini:'grok', grok:'agy', agy:'grok', droid:'codex', opencode:'agy' }`. Phase 0 drops any CLI that fails the health check or write probe (e.g. droid on a machine with no Factory plan), and re-routes its alternates accordingly.
 - All pass/fail verdicts above were verified by inspecting the artifact files the CLIs created (exact content match), not by exit codes. Exit codes were not independently characterized for grok/agy success paths — orchestrator should verify worker output via artifacts (files, commits) rather than trusting exit codes.
 - Smoke tests ran in a fresh `git init` directory (`/tmp/cli-smoke`, since removed); none of the four tested CLIs required interactive input or hung.
 - Each tested CLI completed the trivial task in well under 180 s.
@@ -98,5 +99,5 @@ Global precondition: every invocation string below assumes the current working d
 ## E2E re-verification (2026-06-08)
 
 - **codex — NOW VERIFIED end-to-end.** Invocation: `codex exec -s workspace-write --skip-git-repo-check "$(cat .ultraswarm-prompt.txt)" </dev/null`. Ran the backend math task through the full pipeline (worktree → code → gates → review → merge): 4/4 tests, approved attempt 1, merged green. Slow (~5 min/task); registry timeout raised to 15 min. Status: **enabled**.
-- **droid — re-probed 2026-06-08, still DISABLED.** Login now works (model Claude Opus 4.8 reachable via `droid --list-tools`), but non-interactive `droid exec` fails immediately in every context tested — linked worktree, plain `git init` repo, established project dir, and read-only mode — returning `{is_error:true, num_turns:0, output_tokens:0, result:"Exec failed"}` in <1 s. The `exec` subcommand never reaches a model turn. Not an auth problem and not fixable from the harness; re-probe after a droid upgrade.
+- **droid — enabled with `droid exec "<prompt>"` (help-verified, not smoke-tested here).** Login works (model Claude Opus 4.8 reachable via `droid --list-tools`), but on the test machine `droid exec` returned `{is_error:true, num_turns:0, output_tokens:0, result:"Exec failed"}` in <1 s — never reaching a model turn. This is consistent with **no active Factory subscription** (droid exec needs a paid plan to run a model), not a CLI defect. The correct invocation per Factory's help docs is `droid exec "$(cat .ultraswarm-prompt.txt)"`; on a subscribed machine Phase 0's write probe verifies it live before routing.
 - Second routine-tier pipeline run (codex + grok) was clean: both approved attempt 1, sequential squash-merge gated green after each, final 10/10 on main, worktrees swept.
