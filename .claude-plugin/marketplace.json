@@ -15,11 +15,7 @@
       "author": {
         "name": "Fubak"
       },
-      "source": "./",
-      "strict": false,
-      "skills": [
-        "./skills/ultraswarm"
-      ]
+      "source": "./"
     }
   ]
 }
