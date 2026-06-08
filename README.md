@@ -148,11 +148,11 @@ Tasks are routed to CLIs by specialty:
 
 | CLI | Specialty | Status |
 |---|---|---|
-| **codex** | Backend, logic, algorithms, debugging | ⚠️ disabled (see below) |
+| **codex** | Backend, logic, algorithms, debugging | ✅ verified end-to-end (slow, ~5 min/task) |
 | **gemini** | Frontend, UI, CSS, components | ✅ verified |
 | **grok** | Tests, refactors, general | ✅ verified end-to-end |
 | **agy** | Docs, boilerplate, general | ✅ verified end-to-end |
-| **droid** | General full-stack implementation, refactoring | ⚠️ disabled (not authenticated) |
+| **droid** | General full-stack implementation, refactoring | ⚠️ disabled (`droid exec` broken) |
 | **opencode** | Junior tier: boilerplate, lint/type fixes, simple tests, JSDoc | ✅ verified |
 
 **Routing isn't rigid.** For `high`-risk tasks, ultraswarm sends the *same* task to two CLIs in parallel worktrees and a judge panel picks the winner — independent attempts beat one-attempt-and-hope when the task is risky. Routine tasks go to a single CLI.
@@ -197,23 +197,23 @@ Worktrees and branches are deliberately kept until *after* the final report, so 
 Asking `/ultraswarm` to build two small utilities with tests (a routine, two-task run):
 
 ```
-Phase 0 — health check: agy ✓  grok ✓   (codex dropped: worktree write probe failed)
+Phase 0 — health check: codex ✓  grok ✓   (droid dropped: exec broken)
           gates verified green on base tree: npm test ✓
           tasks:
-            t1 [routine] agy  → src/math.js + test/math.test.js
-            t2 [routine] grok → src/slugify.js + test/slugify.test.js
+            t1 [routine] codex → src/math.js + test/math.test.js
+            t2 [routine] grok  → src/slugify.js + test/slugify.test.js
           → confirm? (you approve)
 
-Phase 1/2 — impl:t1:agy#1    → worktree, agy codes, 4/4 tests, review ✓
-            impl:t2:grok#1   → worktree, grok codes, 6/6 tests, review ✓
+Phase 1/2 — impl:t1:codex#1   → worktree, codex codes, 4/4 tests, review ✓
+            impl:t2:grok#1    → worktree, grok codes, 6/6 tests, review ✓
 
-Phase 3 — merge t1 → npm test ✓ → commit "(ultraswarm: agy)"
+Phase 3 — merge t1 → npm test ✓ → commit "(ultraswarm: codex)"
           merge t2 → npm test ✓ → commit "(ultraswarm: grok)"
 
 Phase 4 — full suite 10/10 ✓ · cleanup swept 2 worktrees / 2 branches
-          | task | cli  | attempts | QA  | files                        |
-          | t1   | agy  | 1        | ✓   | src/math.js, test/...        |
-          | t2   | grok | 1        | ✓   | src/slugify.js, test/...     |
+          | task | cli   | attempts | QA  | files                        |
+          | t1   | codex | 1        | ✓   | src/math.js, test/...        |
+          | t2   | grok  | 1        | ✓   | src/slugify.js, test/...     |
           nothing failed · nothing reassigned · nothing fell back to Claude
 ```
 
@@ -265,14 +265,14 @@ git branch --list 'ultraswarm/*' | xargs -r git branch -D
 
 ## Limitations & status
 
-Honest current state (as of the initial verification, 2026-06-07):
+Honest current state (verified 2026-06-07, re-verified 2026-06-08):
 
-- **Verified end-to-end:** the routine-tier pipeline (decompose → worktree → CLI codes → gates → review → sequential merge → final verify) using **agy** and **grok**. Both implemented their tasks correctly on the first attempt; merges gated clean; cleanup verified.
+- **Verified end-to-end:** the routine-tier pipeline (decompose → worktree → CLI codes → gates → review → sequential merge → final verify) using **codex**, **grok**, and **agy**. Each implemented its task correctly on the first attempt; merges gated clean; cleanup verified.
+  - **codex** needs specific flags — `codex exec -s workspace-write --skip-git-repo-check '<prompt>' </dev/null` — because its default sandbox rejects worktree writes and bare `exec` hangs on stdin. It's also **slow (~5 min/task)**, so it runs with a 15-min timeout. The registry encodes all of this.
 - **Verified by health/write probe, not yet exercised in a full run:** **gemini**, **opencode**.
 - **Currently disabled:**
-  - **codex** — installed and authenticated, but its `bwrap` sandbox rejects all writes inside linked git worktrees, and `exec` hangs in fresh repos. Re-probe after a codex upgrade or sandbox-config change before routing to it.
-  - **droid** — not authenticated (`FACTORY_API_KEY` / login required). Authenticate, then re-run the write probe.
-- **The high-risk competition path** (judge panel + 3-lens adversarial verify) is review-verified but has **not** been exercised in a live run — the smoke test only used routine-tier tasks. The first real high-risk task is its live test.
+  - **droid** — authenticated and the model is reachable (`droid --list-tools` → Claude Opus 4.8), but its non-interactive `droid exec` subcommand fails immediately in every context (≈0.8 s, 0 turns, 0 tokens, `"Exec failed"`) — a broken `exec`, not an auth problem. Re-probe after a droid upgrade.
+- **The high-risk competition path** (judge panel + 3-lens adversarial verify) is review-verified but has **not** been exercised in a live run — the smoke tests only used routine-tier tasks. The first real high-risk task is its live test.
 - **Local only** — no remote/CI execution. Everything runs in local worktrees.
 
 CLI availability and flags drift over time. The skill re-checks health and write capability at the start of *every* run, so a CLI that breaks (or gets fixed) is picked up automatically — the table above is a snapshot, not a hard dependency.

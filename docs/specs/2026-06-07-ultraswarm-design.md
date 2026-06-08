@@ -57,7 +57,7 @@ Maintained as a table inside the skill. Each entry: invocation command, auto-app
 
 | CLI | Invocation (run inside the worktree) | Specialty | Status |
 |---|---|---|---|
-| codex | `codex exec --full-auto "$(cat .ultraswarm-prompt.txt)"` | Backend, logic, algorithms, debugging | verified → **later disabled** (e2e write probe 2026-06-07; see cli-verification.md) |
+| codex | `codex exec -s workspace-write --skip-git-repo-check "$(cat .ultraswarm-prompt.txt)" </dev/null` | Backend, logic, algorithms, debugging | verified (re-verified 2026-06-08 with corrected flags; slow ~5 min/task) |
 | gemini | `gemini --yolo -p "$(cat .ultraswarm-prompt.txt)"` | Frontend, UI, CSS, components | verified |
 | droid | **DISABLED — not authenticated (FACTORY_API_KEY/login required)**; excluded from routing; re-verify steps live in docs/notes/cli-verification.md | General full-stack implementation, refactoring | **disabled** |
 | grok | `grok --always-approve -p "$(cat .ultraswarm-prompt.txt)"` | Tests, refactors, general | verified |

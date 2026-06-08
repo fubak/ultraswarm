@@ -11,9 +11,9 @@ description: Orchestrate external AI CLIs (codex, gemini, grok, agy, droid, open
 
 | CLI | Invocation (run inside the worktree) | Specialty | Timeout |
 |---|---|---|---|
-| codex | `codex exec --full-auto "$(cat .ultraswarm-prompt.txt)"` ⚠️ failed write probe 2026-06-07: bwrap sandbox rejects all writes in linked worktrees, and exec hangs in fresh repos (while authenticated). Re-probe before routing. | Backend, logic, algorithms, debugging | 10 min |
+| codex | `codex exec -s workspace-write --skip-git-repo-check "$(cat .ultraswarm-prompt.txt)" </dev/null` ⏳ slow (~5 min/task with gpt-5.5) — give it a 15-min timeout. `-s workspace-write` is required (default sandbox rejects worktree writes); `</dev/null` is required (codex hangs waiting on stdin otherwise). | Backend, logic, algorithms, debugging | 15 min |
 | gemini | `gemini --yolo -p "$(cat .ultraswarm-prompt.txt)"` | Frontend, UI, CSS, components | 10 min |
-| droid | **DISABLED — not authenticated (FACTORY_API_KEY/login required)**; excluded from routing; re-verify steps live in docs/notes/cli-verification.md | General full-stack implementation, refactoring | 10 min |
+| droid | **DISABLED — `droid exec` broken (2026-06-08)**: authenticated and the model is reachable (`droid --list-tools` → Claude Opus 4.8), but non-interactive `droid exec` fails immediately in every context (≈0.8 s, 0 turns, 0 tokens, `"Exec failed"`). Excluded from routing; re-probe after a droid upgrade. | General full-stack implementation, refactoring | 10 min |
 | grok | `grok --always-approve -p "$(cat .ultraswarm-prompt.txt)"` | Tests, refactors, general | 10 min |
 | agy | `agy --print-timeout 15m -p "$(cat .ultraswarm-prompt.txt)"` | Docs, boilerplate, general | 10 min |
 | opencode | `opencode run --agent build -m "xai/grok-build-0.1" "$(cat .ultraswarm-prompt.txt)"` | Junior tier: boilerplate, lint/type fixes, simple tests, JSDoc | 10 min |
@@ -22,6 +22,7 @@ description: Orchestrate external AI CLIs (codex, gemini, grok, agy, droid, open
 - Exit codes are uncharacterized for some CLIs — wrappers must verify success via artifacts (files, commits) and gate results, never log-grepping; grok emits spurious ERROR lines on successful runs.
 - All invocations assume the current working directory is the worktree containing `.ultraswarm-prompt.txt`.
 - If opencode fails with `UnknownError`, run `opencode models` and check for model drift (the old `opencode/grok-code` model is dead).
+- codex is slow (~5 min/task) and MUST have stdin closed (`</dev/null`, already in its invocation) — without it codex blocks on stdin and the wrapper times out. Use a 15-min wrapper timeout for codex tasks.
 
 Worktrees: `~/worktrees/<reponame>-us-<taskid>-<cli>`, branch `ultraswarm/<taskid>-<cli>`.
 
@@ -58,7 +59,7 @@ const cfg = typeof args === 'string' ? JSON.parse(args) : args
 //   worktreeRoot: '/home/<user>/worktrees',  // absolute path — never ~ (must round-trip through agents and git verbatim)
 //   gates: [{name:'build',cmd:'npm run build'},{name:'test',cmd:'npm test'}, ...],
 //   registry: { codex: 'codex exec --full-auto "$(cat .ultraswarm-prompt.txt)"', ... },
-//   alternates: { gemini:'grok', grok:'agy', agy:'grok', opencode:'agy' },  // adapt to healthy CLIs in Phase 0; codex/droid excluded as targets pending re-probe (see registry)
+//   alternates: { codex:'grok', gemini:'grok', grok:'agy', agy:'grok', opencode:'agy' },  // adapt to healthy CLIs in Phase 0; droid excluded as a target (exec broken — see registry)
 //   timeoutMs: 600000,
 //   tasks: [{ id, description, files:[], cli, risk, acceptance, prompt }],
 // }

@@ -9,18 +9,18 @@ Global precondition: every invocation string below assumes the current working d
 
 | CLI | Version | Status | Smoke test |
 |-----|---------|--------|------------|
-| codex | codex-cli 0.137.0 | **disabled** | FAIL — e2e write probe (bwrap rejects worktree writes; exec hangs in fresh repos). See "E2E smoke-test findings" below. |
+| codex | codex-cli 0.137.0 | enabled | PASS (2026-06-08, corrected flags — see codex entry and "E2E re-verification") |
 | gemini | 0.45.2 | enabled | not run (help-verified per docs/plans/2026-06-07-ultraswarm.md Task 1) |
 | grok | 0.2.33 (c0ddec061) | enabled | PASS |
 | agy | 1.0.6 | enabled | PASS |
-| droid | 0.142.0 | **disabled** | FAIL — not authenticated |
+| droid | 0.142.0 | **disabled** | FAIL — `droid exec` broken (2026-06-08: authenticated, model reachable, but exec fails with 0 turns / "Exec failed") |
 | opencode | 1.16.2 | enabled | PASS (model corrected, see entry) |
 
-## codex (disabled — e2e write-probe FAIL, see E2E findings below)
+## codex (enabled — re-verified 2026-06-08 with corrected flags)
 
 - Version: `codex-cli 0.137.0`
-- Invocation: `codex exec --full-auto "$(cat .ultraswarm-prompt.txt)"`
-- Smoke test: not run (flags known-good; docs/plans/2026-06-07-ultraswarm.md Task 1 says help-output confirmation suffices for codex and gemini).
+- Invocation: `codex exec -s workspace-write --skip-git-repo-check "$(cat .ultraswarm-prompt.txt)" </dev/null`
+- Smoke test: **PASS (2026-06-08)** — created exact-content file in a linked worktree, and ran the backend math task through the full ultraswarm pipeline (4/4 tests, approved attempt 1, merged green). The earlier `--full-auto` form failed (bwrap rejected worktree writes) and bare `exec` hung on stdin; both are fixed by the invocation above. **Slow (~5 min/task)** — use a 15-min wrapper timeout.
 - Quirks:
   - `--full-auto` is **hidden from `codex exec --help`** in 0.137.0 but still accepted (`codex exec --full-auto --help` exits 0 — strong evidence the flag parses, since clap normally rejects unknown flags, but flag acceptance was not exercised in a real run here). If it is removed in a future version, the explicit equivalent is `codex exec --sandbox workspace-write "$(cat .ultraswarm-prompt.txt)"` (sandbox modes: `read-only`, `workspace-write`, `danger-full-access`; `exec` is non-interactive so no approval prompts).
   - Prompt is a positional arg; `-` or piped stdin also works.
@@ -82,15 +82,21 @@ Global precondition: every invocation string below assumes the current working d
 ## Cross-cutting notes for the registry
 
 - **The plan's Task 2 template rows for gemini and opencode are stale — replace them with the invocations in this file as well (gemini needs `-p`; opencode model is `xai/grok-build-0.1`).** Task 2 of `docs/plans/2026-06-07-ultraswarm.md` instructs substituting only the grok and agy rows from this file, but its hardcoded template has `gemini --yolo "$(cat .ultraswarm-prompt.txt)"` (missing `-p`, so it would start interactive mode) and `opencode run --agent build -m "opencode/grok-code" ...` (model no longer exists; fails with UnknownError).
-- **Alternates map while droid AND codex are disabled** (codex failed the e2e write probe — see below): the plan's example map routes codex→droid, which is dead, and earlier revisions of this map routed into codex. Recommended map over the four healthy CLIs: `{ gemini:'grok', grok:'agy', agy:'grok', opencode:'agy' }`. Revisit when droid is authenticated / codex passes a re-probe.
+- **Alternates map (droid disabled; codex re-enabled 2026-06-08).** droid's `exec` is broken, so it must not be a routing target. Recommended map over the five healthy CLIs: `{ codex:'grok', gemini:'grok', grok:'agy', agy:'grok', opencode:'agy' }`. Revisit when droid is fixed.
 - All pass/fail verdicts above were verified by inspecting the artifact files the CLIs created (exact content match), not by exit codes. Exit codes were not independently characterized for grok/agy success paths — orchestrator should verify worker output via artifacts (files, commits) rather than trusting exit codes.
 - Smoke tests ran in a fresh `git init` directory (`/tmp/cli-smoke`, since removed); none of the four tested CLIs required interactive input or hung.
 - Each tested CLI completed the trivial task in well under 180 s.
 
 ## E2E smoke-test findings (2026-06-07, ultraswarm-e2e run)
 
-- **codex 0.137.0 — FAILED write probe; do not route until re-verified.** Authenticated (`codex login status` → "Logged in using ChatGPT"), but: (a) in a linked git worktree, `codex exec --full-auto` fails every write — "the workspace sandbox rejected all writes due to a `bwrap` permission failure" (reproduced; produced 3 empty attempts in the e2e); (b) in fresh plain repos (/tmp and $HOME), `codex exec` hung until a 180–240s timeout with no output. Re-probe after a codex upgrade or sandbox config change before enabling. A `--sandbox`/`writable_roots` workaround was not validated.
+- **codex 0.137.0 — initially FAILED, now PASSES with corrected flags (re-verified 2026-06-08).** With `codex exec --full-auto` it failed every write in a linked worktree ("the workspace sandbox rejected all writes due to a `bwrap` permission failure"), and bare `codex exec` hung. **Fix:** `codex exec -s workspace-write --skip-git-repo-check "$(cat .ultraswarm-prompt.txt)" </dev/null` — `-s workspace-write` allows worktree writes (and falls back to non-sandboxed exec if bwrap can't initialize), and closing stdin (`</dev/null`) stops codex from blocking on it. Verified end-to-end in the pipeline: codex (gpt-5.5) implemented the math task + tests in a worktree, 4/4 green, merged clean. **Caveat: codex is slow (~5 min/task)** — use a 15-min wrapper timeout.
 - **agy 1.0.6 — PASSED a write probe inside a linked worktree** (created exact-content file via `-p`). Worktree routing verified, not just plain-repo.
 - **grok 0.2.33 — verified end-to-end in worktrees**: created correct implementation + tests on attempt 1 of the first e2e run (rejected only because the project's gate command was broken, not its code).
 - **Environment quirk (not a CLI quirk): Node 26 `node --test test/` does NOT do directory discovery** — it resolves `test/` as a module and crashes MODULE_NOT_FOUND. Use bare `node --test`. A broken gate like this poisons every wrapper/QA cycle; SKILL.md Phase 0 now requires verifying gates green on the base tree before any Workflow launch.
 - **Workflow `args` may arrive as a JSON string** depending on the caller — the SKILL.md template now validates at the boundary (`const cfg = typeof args === 'string' ? JSON.parse(args) : args`).
+
+## E2E re-verification (2026-06-08)
+
+- **codex — NOW VERIFIED end-to-end.** Invocation: `codex exec -s workspace-write --skip-git-repo-check "$(cat .ultraswarm-prompt.txt)" </dev/null`. Ran the backend math task through the full pipeline (worktree → code → gates → review → merge): 4/4 tests, approved attempt 1, merged green. Slow (~5 min/task); registry timeout raised to 15 min. Status: **enabled**.
+- **droid — re-probed 2026-06-08, still DISABLED.** Login now works (model Claude Opus 4.8 reachable via `droid --list-tools`), but non-interactive `droid exec` fails immediately in every context tested — linked worktree, plain `git init` repo, established project dir, and read-only mode — returning `{is_error:true, num_turns:0, output_tokens:0, result:"Exec failed"}` in <1 s. The `exec` subcommand never reaches a model turn. Not an auth problem and not fixable from the harness; re-probe after a droid upgrade.
+- Second routine-tier pipeline run (codex + grok) was clean: both approved attempt 1, sequential squash-merge gated green after each, final 10/10 on main, worktrees swept.
