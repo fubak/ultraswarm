@@ -7,7 +7,13 @@ description: Orchestrate external AI CLIs (codex, gemini, grok, agy, droid, open
 
 **Role contract:** Claude does NOT write feature code (single exception: the last-resort fail path, always flagged in the report). Claude decomposes, authors the Workflow, reviews, judges, merges, and reports. External CLIs do all coding inside isolated git worktrees.
 
+**Modes** — dispatch on the invocation argument:
+- `/ultraswarm config` (argument is exactly `config`, or the user asks to set up / choose / change which CLIs the swarm uses) → run the **Configuration builder** (see the Configuration section) and stop. Do NOT decompose or run a Workflow.
+- `/ultraswarm <task>` (anything else) → normal run, starting at Phase 0.
+
 ## CLI Worker Registry
+
+The table below is the **built-in default roster**. The user's config (next section) selects which of these the swarm may actually use and can override any field per CLI.
 
 | CLI | Invocation (run inside the worktree) | Specialty | Timeout |
 |---|---|---|---|
@@ -26,9 +32,50 @@ description: Orchestrate external AI CLIs (codex, gemini, grok, agy, droid, open
 
 Worktrees: `~/worktrees/<reponame>-us-<taskid>-<cli>`, branch `ultraswarm/<taskid>-<cli>`.
 
+## Configuration — selecting which CLIs the swarm uses
+
+Users control the roster with a JSON config. Two locations, **project overrides global**:
+
+1. **Global default:** `~/.claude/ultraswarm.config.json` — applies to every repo.
+2. **Project override:** `ultraswarm.config.json` in the target repo root — overrides the global file for that repo only.
+
+**Schema** (all fields optional):
+
+```json
+{
+  "enabled": ["codex", "grok", "agy"],
+  "overrides": {
+    "codex":    { "timeoutMs": 900000 },
+    "opencode": { "invocation": "opencode run --agent build -m \"xai/grok-4.3\" \"$(cat .ultraswarm-prompt.txt)\"" }
+  }
+}
+```
+
+- `enabled` — allowlist of registry CLI names the swarm may use. **Omit entirely** to mean "all installed CLIs from the default roster." An empty array `[]` is an error (don't disable everything silently — tell the user).
+- `overrides` — per-CLI field overrides merged onto the default registry row. Supported keys: `invocation` (the exact shell command), `timeoutMs` (per-CLI wall-clock budget → the Workflow's `timeouts[cli]`), `specialty` (routing hint), `alternate` (fallback CLI for the reassign step).
+
+**Merge rule:** if a project config is present, its `enabled` **replaces** the global `enabled` (not unioned), and its `overrides` deep-merge onto the global overrides (project wins per CLI). A missing file at either level is simply skipped.
+
+**How Phase 0 applies it:** the effective roster =
+`config.enabled` (or the full default roster if `enabled` is omitted)
+ → keep only CLIs that pass the health check **and** the write probe
+ → apply `overrides`.
+Always show the user the resulting roster and why anything was excluded (not in `enabled` · not installed · failed write probe). If the config names a CLI that isn't in the built-in registry, warn and ignore it.
+
+### Configuration builder (`/ultraswarm config`)
+
+Run this when invoked as `/ultraswarm config`. It writes/updates a config file; it does not run a coding job.
+
+1. **Probe every registry CLI** for real availability — the binary name equals the registry key (`codex`, `gemini`, `grok`, `agy`, `droid`, `opencode`), so for each: `command -v <cli>` and `<cli> --version` (and note auth-gated ones like droid that need a subscription). Optionally run the full write probe if the user wants certainty; otherwise presence is enough for the builder.
+2. **Show a table:** CLI · installed? · version · currently-enabled (from any existing config) · specialty.
+3. **Ask which CLIs to enable** (use AskUserQuestion with `multiSelect: true`, pre-checking the installed ones). Let the user pick freely — they may enable an installed CLI you couldn't fully verify, or leave one out deliberately.
+4. **Ask the scope:** write to the **global** file (`~/.claude/ultraswarm.config.json`) or a **project** file (`./ultraswarm.config.json`).
+5. **Write the JSON** (preserving any existing `overrides`), then read it back and show the final contents. Confirm the path written and remind the user it takes effect on the next `/ultraswarm` run.
+6. If `< 2` CLIs end up enabled, warn clearly — the swarm needs at least two healthy CLIs to run (competition + reassignment depend on it).
+
 ## Phase 0 — Decompose (inline, before any Workflow)
 
-1. **Health check:** run `<cli> --version` for every registry row. Skip rows marked DISABLED; `--version` does not verify authentication. Then, for each CLI that will receive tasks, run a **write probe**: create a scratch linked worktree of the target repo, have the CLI create one trivial file there, verify the artifact exists, remove the worktree. `--version` proves presence, not the ability to write — sandboxed CLIs can fail every write inside linked worktrees while appearing healthy (e2e-verified 2026-06-07: codex's bwrap sandbox did exactly this). Drop broken CLIs from routing and TELL THE USER which were dropped. If fewer than 2 CLIs are healthy, stop and report — do not fall back to Claude-coded work silently.
+1. **Load config & health-check.** First read the config (global `~/.claude/ultraswarm.config.json`, then project `./ultraswarm.config.json` overriding it — see the Configuration section for the merge rule); the candidate roster is the merged `enabled` list, or the full default registry if no `enabled` is set. If the user has never configured anything and you have not mentioned it this session, note once that `/ultraswarm config` lets them pick the roster. Then for each candidate run `<cli> --version` **and** a **write probe**: create a scratch linked worktree of the target repo, have the CLI create one trivial file there, verify the artifact exists, remove the worktree. `--version` proves presence, not the ability to write — sandboxed or unsubscribed CLIs can fail every write inside linked worktrees while appearing installed (e2e-verified 2026-06-07: codex's bwrap sandbox did exactly this; droid needs a Factory plan). Drop CLIs that fail either check and TELL THE USER which were dropped and why (not in `enabled` · not installed · failed write probe). If fewer than 2 CLIs survive, stop and report — do not fall back to Claude-coded work silently. Finally, build the Workflow args from the surviving CLIs: `registry`/`alternates` from each row's (possibly overridden) `invocation`/`alternate`, and `timeouts[cli]` from each row's Timeout column converted to ms (e.g. codex 15 min → 900000), with any `overrides.timeoutMs` applied on top; routing uses each row's (possibly overridden) `specialty`.
 2. **Explore the target repo:** structure, conventions, tech stack. Detect the gate commands (build, typecheck, test, lint) from package.json / Makefile / CI config. If there is no test command, say so loudly and ask whether to proceed (QA loses its mechanical tier).
 3. **Decompose** into 3–10 tasks: `{id, description, files, cli, risk, acceptance, prompt}`.
    - `risk: "high"` if the task touches auth/security/payments, changes shared interfaces or data models, has architectural impact, or modifies logic with no existing test coverage. Otherwise `"routine"`.
@@ -60,7 +107,8 @@ const cfg = typeof args === 'string' ? JSON.parse(args) : args
 //   gates: [{name:'build',cmd:'npm run build'},{name:'test',cmd:'npm test'}, ...],
 //   registry: { codex: 'codex exec --full-auto "$(cat .ultraswarm-prompt.txt)"', ... },
 //   alternates: { codex:'droid', gemini:'grok', grok:'agy', agy:'grok', droid:'codex', opencode:'agy' },  // adapt to healthy CLIs in Phase 0 (drop any that fail the write probe)
-//   timeoutMs: 600000,
+//   timeoutMs: 600000,  // default per-CLI wall-clock budget
+//   timeouts: { codex: 900000 },  // optional per-CLI overrides (from the registry Timeout column + config overrides.timeoutMs); falls back to timeoutMs
 //   tasks: [{ id, description, files:[], cli, risk, acceptance, prompt }],
 // }
 
@@ -92,7 +140,7 @@ ${t.prompt}${feedback.length ? `
 REVIEWER FEEDBACK FROM PREVIOUS ATTEMPT — fix every item:
 - ${feedback.join('\n- ')}` : ''}
 ---PROMPT END---
-3. Run the CLI inside the worktree (Bash timeout ${cfg.timeoutMs}): cd ${wt(t,cli)} && ${cfg.registry[cli]}
+3. Run the CLI inside the worktree (Bash timeout ${cfg.timeouts?.[cli] ?? cfg.timeoutMs}): cd ${wt(t,cli)} && ${cfg.registry[cli]}
 4. After it exits, run each gate inside the worktree and record pass/fail + a one-line detail:
    ${gateList}
 5. Housekeeping: rm ${wt(t,cli)}/.ultraswarm-prompt.txt, then cd ${wt(t,cli)} && git add -A && git commit -m "ultraswarm: ${t.id} attempt ${attempt}" (commit even if gates failed — the diff must be inspectable).

@@ -15,6 +15,7 @@ The point: spend external-CLI tokens on the typing, spend Claude's judgment on t
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Usage](#usage)
+- [Choosing which CLIs to use](#choosing-which-clis-to-use)
 - [The worker registry](#the-worker-registry)
 - [The QA model](#the-qa-model)
 - [What gets created on disk](#what-gets-created-on-disk)
@@ -160,6 +161,42 @@ Your working branch is only ever touched in step 4, and only by approved, gate-p
 
 ---
 
+## Choosing which CLIs to use
+
+By default the swarm uses every CLI from the [worker registry](#the-worker-registry) that's actually installed and passes a write probe. You can narrow or customize that roster with a small JSON config.
+
+### Interactive builder (easiest)
+
+```
+/ultraswarm config
+```
+
+Claude probes which CLIs are installed on your machine, shows you the list, asks which to enable (multi-select), and writes the config file for you — global or per-repo, your choice. Re-run it any time to change the roster.
+
+### The config file
+
+Two locations, **project overrides global**:
+
+- **Global default:** `~/.claude/ultraswarm.config.json` — applies to every repo.
+- **Per-repo override:** `ultraswarm.config.json` in a repo root — overrides the global file for that project (safe to commit so a team shares one roster).
+
+```json
+{
+  "enabled": ["codex", "grok", "agy"],
+  "overrides": {
+    "codex": { "timeoutMs": 900000 },
+    "opencode": { "invocation": "opencode run --agent build -m \"xai/grok-4.3\" \"$(cat .ultraswarm-prompt.txt)\"" }
+  }
+}
+```
+
+- **`enabled`** — allowlist of registry CLI names the swarm may use. Omit it to mean "all installed CLIs." (An empty list is treated as a mistake, not "disable everything.")
+- **`overrides`** — optional per-CLI tweaks merged onto the built-in registry row: `invocation`, `timeoutMs`, `specialty`, `alternate`.
+
+A starter template is in [`ultraswarm.config.example.json`](ultraswarm.config.example.json). Whatever you enable, Phase 0 still health-checks and write-probes each CLI and drops any that aren't actually working — telling you which and why. The swarm needs **at least two** working CLIs to run.
+
+---
+
 ## The worker registry
 
 Tasks are routed to CLIs by specialty:
@@ -264,7 +301,7 @@ Nothing failed · nothing reassigned · nothing fell back to Claude.
 
 ## Configuration reference
 
-You don't normally configure ultraswarm by hand — Claude authors the per-run Workflow from the template in `SKILL.md`, filling in values from Phase 0. But it helps to know the knobs:
+To choose *which* CLIs the swarm uses, see [Choosing which CLIs to use](#choosing-which-clis-to-use) — that's the config most users want. The reference below is the internal per-run **Workflow** input, which Claude authors from the `SKILL.md` template and fills in from Phase 0 (your `ultraswarm.config.json` feeds the `registry`, `alternates`, and `timeouts` fields and Phase 0 routing). You don't normally set these by hand, but it helps to know the knobs:
 
 | Field | Meaning |
 |---|---|
@@ -274,7 +311,8 @@ You don't normally configure ultraswarm by hand — Claude authors the per-run W
 | `gates` | List of `{name, cmd}` — build/test/lint commands run in each worktree and after each merge |
 | `registry` | Map of CLI → verified invocation string |
 | `alternates` | Map of CLI → fallback CLI for the reassign step |
-| `timeoutMs` | Per-CLI wall-clock budget before a run counts as a failed attempt |
+| `timeoutMs` | Default wall-clock budget before a run counts as a failed attempt |
+| `timeouts` | Optional per-CLI budget overrides (e.g. codex needs 15 min); falls back to `timeoutMs` |
 | `tasks` | The decomposed task list |
 
 ---
@@ -325,6 +363,7 @@ CLI availability and flags drift over time. The skill re-checks health and write
 ultraswarm/
 ├── README.md                                   ← you are here
 ├── LICENSE                                      ← MIT
+├── ultraswarm.config.example.json              ← starter CLI-selection config
 ├── .claude-plugin/
 │   ├── plugin.json                             ← plugin manifest
 │   └── marketplace.json                        ← single-plugin marketplace listing
