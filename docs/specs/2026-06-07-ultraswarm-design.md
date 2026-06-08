@@ -119,7 +119,7 @@ The wrapper does not write feature code. Its only edits are mechanical (e.g., no
 
 **Fail path (loud, never silent):**
 1. Re-dispatch to the **same CLI** in the same worktree with reviewer feedback appended to the prompt — max 2 retries.
-2. Then reassign to a **different CLI** (fresh worktree).
+2. Then reassign to a **different CLI** (fresh worktree, or its existing competition worktree if it was a competitor).
 3. Last resort: **Claude implements the task directly** (the only case where Claude writes feature code), flagged in the final report.
 
 ## Phase 3 — Merge (sequential, Claude-only)

@@ -127,7 +127,7 @@ async function attemptLoop(t, cli, maxAttempts, seedFeedback, attemptOffset = 0)
     const attempt = attemptOffset + n
     const impl = await implement(t, cli, attempt, feedback)
     if (!impl || impl.status !== 'ok') {
-      const gates = impl ? impl.gate_results.filter(g => !g.pass).map(g => `${g.name}: ${g.detail || 'failed'}`).join('; ') : ''
+      const gates = impl ? (impl.gate_results || []).filter(g => !g.pass).map(g => `${g.name}: ${g.detail || 'failed'}`).join('; ') : ''
       feedback = [...feedback, impl
         ? `attempt ${attempt} (${cli}): ${impl.status} — ${impl.summary}${gates ? ` · failing gates: ${gates}` : ''}`
         : `attempt ${attempt} (${cli}): wrapper agent died`]
@@ -144,8 +144,9 @@ async function runTask(t) {
   if (t.risk === 'high') {
     const clis = [t.cli, args.alternates[t.cli]]
     log(`${t.id} (high risk): competing on ${clis.join(' vs ')}`)
-    const impls = (await parallel(clis.map(c => () =>
-      implement(t, c, 1, []).then(i => i && { ...i, cli: c })))).filter(Boolean).filter(i => i.status === 'ok')
+    const all = (await parallel(clis.map(c => () =>
+      implement(t, c, 1, []).then(i => i && { ...i, cli: c })))).filter(Boolean)
+    const impls = all.filter(i => i.status === 'ok')
     let winner = impls[0], graft = []
     if (impls.length > 1) {
       const scores = (await parallel(impls.map(i => () =>
@@ -155,7 +156,11 @@ async function runTask(t) {
       graft = scores.slice(1).flatMap(x => x.s.graft_ideas)
     }
     let retryCli = t.cli
-    let seed = [`attempt 1 (${clis.join(' + ')}): no competitor produced a passing implementation`]
+    let seed = [`attempt 1 (${clis.join(' + ')}): no competitor produced a passing implementation`,
+      ...all.filter(i => i.status !== 'ok').map(i => {
+        const gates = (i.gate_results || []).filter(g => !g.pass).map(g => `${g.name}: ${g.detail || 'failed'}`).join('; ')
+        return `attempt 1 (${i.cli}): ${i.status} — ${i.summary}${gates ? ` · failing gates: ${gates}` : ''}`
+      })]
     if (winner) {
       const verdict = await qa(t, winner)
       if (verdict.approve) return { task: t.id, cli: winner.cli, impl: winner, attempts: 1, graft }
@@ -184,7 +189,7 @@ return {
 }
 ```
 
-Notes: the high-risk branch is terminal — attempt 1 is a two-CLI competition; the judged winner (or the primary, when no competitor passes attempt 1) gets 2 feedback retries (attempts 2–3) on its own CLI/worktree, then that CLI's alternate gets 2 attempts (4–5), then the task tombstones as `{task, failed: true}`. Routine tasks get 3 attempts on the primary, then 2 on the alternate (attempts 4–5), then the same tombstone. `attemptLoop` returns `{exhausted: true, feedback}` on exhaustion, so all rejection feedback — QA issues and failing-gate details — accumulates and is carried into the alternate CLI's prompts along with a reassignment note. Both branches return through the same shape; a task that exhausts every path comes back as `{task, failed: true}` — never silently dropped.
+Notes: the high-risk branch is terminal — attempt 1 is a two-CLI competition; the judged winner (or the primary, when no competitor passes attempt 1) gets 2 feedback retries (attempts 2–3) on its own CLI/worktree, then that CLI's alternate gets 2 attempts (4–5), then the task tombstones as `{task, failed: true}`. Routine tasks get 3 attempts on the primary, then 2 on the alternate (attempts 4–5), then the same tombstone. `attemptLoop` returns `{exhausted: true, feedback}` on exhaustion, so all rejection feedback — QA issues and failing-gate details — accumulates and is carried into the alternate CLI's prompts along with a reassignment note. In the high-risk path the alternate may resume in its own competition worktree rather than a fresh one — deliberate: it has its own branch, committed history, and the carried feedback. Both branches return through the same shape; a task that exhausts every path comes back as `{task, failed: true}` — never silently dropped.
 
 ## Phase 3 — Merge (inline, orchestrator Claude, after the Workflow returns)
 
@@ -192,7 +197,7 @@ Require a clean working tree (`git status --porcelain` empty) before the first m
 
 ```bash
 cd <repo>
-git merge --squash <branch>           # or: git diff <baseBranch> <branch> | git apply   (<baseBranch> = the Workflow's args.baseBranch)
+git merge --squash <branch>           # or: git diff $(git merge-base <baseBranch> <branch>) <branch> | git apply   (<baseBranch> = the Workflow's args.baseBranch)
 # run EVERY gate (build, typecheck, test, lint)
 git commit -m "feat: <task summary> (ultraswarm: <cli>)"
 git worktree remove --force <worktree> && git branch -D <branch>
