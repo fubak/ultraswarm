@@ -1,13 +1,13 @@
 # /ultraswarm — Design Spec
 
 **Date:** 2026-06-07
-**Status:** Approved design, pre-implementation
+**Status:** Implemented and shipped as the `ultraswarm` plugin (v0.1, 2026-06-08). This document is the original design; the canonical implementation is `skills/ultraswarm/SKILL.md`, and runtime CLI status lives in `docs/notes/cli-verification.md`. Amendment notes below record where the build diverged from this design.
 
 ## Problem
 
 The built-in `ultracode` workflow is powerful because of the `Workflow` tool underneath it: deterministic JS orchestration, `agent()` fan-out, JSON-schema-validated outputs, `pipeline()` parallelism, phase/progress UI, adversarial verification, token budgets, and resume-from-checkpoint. But all coding work is done by Claude subagents, which is expensive in Claude tokens.
 
-`/ultraswarm` keeps the entire ultracode orchestration machinery while delegating the bulk coding work to locally installed external AI CLIs (codex, gemini, grok, agy). Claude acts purely as orchestrator, QA gate, and merge authority.
+`/ultraswarm` keeps the entire ultracode orchestration machinery while delegating the bulk coding work to locally installed external AI CLIs (codex, gemini, grok, agy, droid, opencode). Claude acts purely as orchestrator, QA gate, and merge authority.
 
 ## Approved Decisions
 

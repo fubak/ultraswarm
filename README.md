@@ -2,7 +2,7 @@
 
 **Claude orchestrates a swarm of external AI coding CLIs — they write the code in isolated git worktrees, Claude verifies and merges.**
 
-`ultraswarm` is a [Claude Code](https://claude.com/claude-code) skill. It keeps the orchestration machinery of Claude Code's built-in `ultracode` workflow — deterministic control flow, schema-validated agent output, parallel pipelines, adversarial QA, resume-from-checkpoint — but delegates the *bulk coding* to locally installed external CLIs (codex, gemini, grok, agy, droid, opencode). Claude never writes feature code by default. It decomposes the work, routes each task to the best CLI, gates every result through tiered QA, and merges only what passes.
+`ultraswarm` is a [Claude Code](https://claude.com/claude-code) plugin that provides the `/ultraswarm` skill. It keeps the orchestration machinery of Claude Code's built-in `ultracode` workflow — deterministic control flow, schema-validated agent output, parallel pipelines, adversarial QA, resume-from-checkpoint — but delegates the *bulk coding* to locally installed external CLIs (codex, gemini, grok, agy, droid, opencode). Claude never writes feature code by default. It decomposes the work, routes each task to the best CLI, gates every result through tiered QA, and merges only what passes.
 
 The point: spend external-CLI tokens on the typing, spend Claude's judgment on the decomposition, the review, and the merge.
 

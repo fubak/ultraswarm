@@ -1,6 +1,6 @@
 {
   "name": "ultraswarm",
-  "description": "Orchestrate external AI coding CLIs (codex, gemini, grok, agy, opencode) as workers in isolated git worktrees — Claude decomposes, authors a Workflow, QAs, and merges; the CLIs write the code.",
+  "description": "Orchestrate external AI coding CLIs (codex, gemini, grok, agy, droid, opencode) as workers in isolated git worktrees — Claude decomposes, authors a Workflow, QAs, and merges; the CLIs write the code.",
   "version": "0.1.0",
   "author": {
     "name": "Fubak"
