@@ -58,7 +58,7 @@ const cfg = typeof args === 'string' ? JSON.parse(args) : args
 //   worktreeRoot: '/home/<user>/worktrees',  // absolute path — never ~ (must round-trip through agents and git verbatim)
 //   gates: [{name:'build',cmd:'npm run build'},{name:'test',cmd:'npm test'}, ...],
 //   registry: { codex: 'codex exec --full-auto "$(cat .ultraswarm-prompt.txt)"', ... },
-//   alternates: { codex:'grok', gemini:'codex', grok:'opencode', agy:'grok', opencode:'codex' },  // adapt to healthy CLIs in Phase 0
+//   alternates: { gemini:'grok', grok:'agy', agy:'grok', opencode:'agy' },  // adapt to healthy CLIs in Phase 0; codex/droid excluded as targets pending re-probe (see registry)
 //   timeoutMs: 600000,
 //   tasks: [{ id, description, files:[], cli, risk, acceptance, prompt }],
 // }

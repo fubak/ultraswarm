@@ -9,14 +9,14 @@ Global precondition: every invocation string below assumes the current working d
 
 | CLI | Version | Status | Smoke test |
 |-----|---------|--------|------------|
-| codex | codex-cli 0.137.0 | enabled | not run (help-verified per docs/plans/2026-06-07-ultraswarm.md Task 1) |
+| codex | codex-cli 0.137.0 | **disabled** | FAIL — e2e write probe (bwrap rejects worktree writes; exec hangs in fresh repos). See "E2E smoke-test findings" below. |
 | gemini | 0.45.2 | enabled | not run (help-verified per docs/plans/2026-06-07-ultraswarm.md Task 1) |
 | grok | 0.2.33 (c0ddec061) | enabled | PASS |
 | agy | 1.0.6 | enabled | PASS |
 | droid | 0.142.0 | **disabled** | FAIL — not authenticated |
 | opencode | 1.16.2 | enabled | PASS (model corrected, see entry) |
 
-## codex (enabled)
+## codex (disabled — e2e write-probe FAIL, see E2E findings below)
 
 - Version: `codex-cli 0.137.0`
 - Invocation: `codex exec --full-auto "$(cat .ultraswarm-prompt.txt)"`
@@ -82,7 +82,7 @@ Global precondition: every invocation string below assumes the current working d
 ## Cross-cutting notes for the registry
 
 - **The plan's Task 2 template rows for gemini and opencode are stale — replace them with the invocations in this file as well (gemini needs `-p`; opencode model is `xai/grok-build-0.1`).** Task 2 of `docs/plans/2026-06-07-ultraswarm.md` instructs substituting only the grok and agy rows from this file, but its hardcoded template has `gemini --yolo "$(cat .ultraswarm-prompt.txt)"` (missing `-p`, so it would start interactive mode) and `opencode run --agent build -m "opencode/grok-code" ...` (model no longer exists; fails with UnknownError).
-- **Alternates map while droid is disabled**: the plan's example map routes codex→droid, which is currently dead. Recommended map over the five healthy CLIs: `{ codex:'grok', gemini:'codex', grok:'opencode', agy:'grok', opencode:'codex' }`. Revisit when droid is authenticated and re-verified.
+- **Alternates map while droid AND codex are disabled** (codex failed the e2e write probe — see below): the plan's example map routes codex→droid, which is dead, and earlier revisions of this map routed into codex. Recommended map over the four healthy CLIs: `{ gemini:'grok', grok:'agy', agy:'grok', opencode:'agy' }`. Revisit when droid is authenticated / codex passes a re-probe.
 - All pass/fail verdicts above were verified by inspecting the artifact files the CLIs created (exact content match), not by exit codes. Exit codes were not independently characterized for grok/agy success paths — orchestrator should verify worker output via artifacts (files, commits) rather than trusting exit codes.
 - Smoke tests ran in a fresh `git init` directory (`/tmp/cli-smoke`, since removed); none of the four tested CLIs required interactive input or hung.
 - Each tested CLI completed the trivial task in well under 180 s.
