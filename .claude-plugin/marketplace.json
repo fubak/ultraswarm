@@ -1,0 +1,25 @@
+{
+  "name": "ultraswarm",
+  "owner": {
+    "name": "Fubak"
+  },
+  "metadata": {
+    "description": "Claude-orchestrated swarm of external AI coding CLIs working in isolated git worktrees, with tiered QA and Claude-only merge.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "ultraswarm",
+      "description": "Orchestrate external AI coding CLIs (codex, gemini, grok, agy, opencode) as workers in isolated git worktrees — Claude decomposes, authors a Workflow, QAs, and merges; the CLIs write the code.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Fubak"
+      },
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/ultraswarm"
+      ]
+    }
+  ]
+}

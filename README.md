@@ -92,7 +92,22 @@ If you just want to fan a couple of CLIs at independent subtasks with minimal ce
 
 ## Installation
 
-ultraswarm is a personal Claude Code skill — a `SKILL.md` discovered from `~/.claude/skills/`.
+ultraswarm is packaged as a Claude Code plugin. **Pick one** of the two methods below — don't do both, or the skill will be registered twice.
+
+### Method A — Plugin (recommended)
+
+The repo is its own single-plugin marketplace. From inside Claude Code:
+
+```
+/plugin marketplace add fubak/ultraswarm
+/plugin install ultraswarm@ultraswarm
+```
+
+That's it — `/ultraswarm` is available after the plugin loads. Update later with `/plugin marketplace update ultraswarm`. This pulls from the repo's default branch, so no manual clone is needed.
+
+### Method B — Manual symlink (for local development)
+
+Use this if you're hacking on the skill itself and want a live-editable checkout.
 
 ```bash
 # 1. Clone
@@ -106,9 +121,7 @@ readlink -f ~/.claude/skills/ultraswarm   # → ~/projects/ultraswarm/skills/ult
 head -3 ~/.claude/skills/ultraswarm/SKILL.md
 ```
 
-The skill registry loads at session start, so `/ultraswarm` becomes available in your **next** Claude Code session.
-
-Symlinking (rather than copying) means `git pull` in the repo updates the live skill automatically.
+The skill registry loads at session start, so `/ultraswarm` becomes available in your **next** Claude Code session. Symlinking (rather than copying) means `git pull` in the repo updates the live skill automatically.
 
 ---
 
@@ -284,6 +297,10 @@ CLI availability and flags drift over time. The skill re-checks health and write
 ```
 ultraswarm/
 ├── README.md                                   ← you are here
+├── LICENSE                                      ← MIT
+├── .claude-plugin/
+│   ├── plugin.json                             ← plugin manifest
+│   └── marketplace.json                        ← single-plugin marketplace listing
 ├── skills/ultraswarm/SKILL.md                  ← the skill (canonical source)
 └── docs/
     ├── specs/2026-06-07-ultraswarm-design.md   ← approved design spec
@@ -297,4 +314,4 @@ ultraswarm/
 
 ## License
 
-No license file yet — add one before relying on it elsewhere.
+[MIT](LICENSE).
