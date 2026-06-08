@@ -18,6 +18,7 @@ Global precondition: every invocation string below assumes the current working d
 
 ## codex (enabled — re-verified 2026-06-08 with corrected flags)
 
+- Vendor: **OpenAI Codex CLI** — https://github.com/openai/codex.
 - Version: `codex-cli 0.137.0`
 - Invocation: `codex exec -s workspace-write --skip-git-repo-check "$(cat .ultraswarm-prompt.txt)" </dev/null`
 - Smoke test: **PASS (2026-06-08)** — created exact-content file in a linked worktree, and ran the backend math task through the full ultraswarm pipeline (4/4 tests, approved attempt 1, merged green). The earlier `--full-auto` form failed (bwrap rejected worktree writes) and bare `exec` hung on stdin; both are fixed by the invocation above. **Slow (~5 min/task)** — use a 15-min wrapper timeout.
@@ -29,6 +30,7 @@ Global precondition: every invocation string below assumes the current working d
 
 ## gemini (enabled)
 
+- Vendor: **Google Gemini CLI** — https://github.com/google-gemini/gemini-cli.
 - Version: `0.45.2`
 - Invocation: `gemini --yolo -p "$(cat .ultraswarm-prompt.txt)"`
 - Smoke test: not run (flags known-good; docs/plans/2026-06-07-ultraswarm.md Task 1 says help-output confirmation suffices for codex and gemini).
@@ -38,6 +40,7 @@ Global precondition: every invocation string below assumes the current working d
 
 ## grok (enabled)
 
+- Vendor: **xAI Grok CLI** — https://x.ai/cli (standalone binary; auth via `grok login`, OAuth through auth.x.ai). Not the npm `superagent-ai/grok-cli`.
 - Version: `grok 0.2.33 (c0ddec061) [stable]`
 - Invocation: `grok --always-approve -p "$(cat .ultraswarm-prompt.txt)"`
 - Smoke test: **PASS** — created `hello-grok.txt` with exact content, unattended.
@@ -49,6 +52,7 @@ Global precondition: every invocation string below assumes the current working d
 
 ## agy (enabled)
 
+- Vendor: **Google Antigravity CLI** — https://antigravity.google (binary self-identifies as `antigravity-cli`; `agy` is the command).
 - Version: `1.0.6`
 - Invocation: `agy --print-timeout 15m --prompt "$(cat .ultraswarm-prompt.txt)"`
 - Smoke test: **PASS** — created `hello-agy.txt` with exact content, unattended, with **no permission flag at all** (plain `-p`/`--print` performed file writes without prompting).
@@ -60,6 +64,7 @@ Global precondition: every invocation string below assumes the current working d
 
 ## droid (enabled — help-verified, needs a Factory subscription)
 
+- Vendor: **Factory CLI (droid)** — https://factory.ai/product/cli.
 - Version: `0.142.0`
 - Invocation: `droid exec "$(cat .ultraswarm-prompt.txt)"`
 - Status: **enabled.** Per Factory's help docs, `droid exec "<prompt>"` is the non-interactive form. **Requires an active Factory subscription** to run; not smoke-tested in this environment because the test machine had no plan (see the re-probe note below). On a subscribed machine, Phase 0's write probe confirms it before routing.
@@ -72,6 +77,7 @@ Global precondition: every invocation string below assumes the current working d
 
 ## opencode (enabled)
 
+- Vendor: **opencode** — https://opencode.ai/docs/#install.
 - Version: `1.16.2`
 - Invocation: `opencode run --agent build -m "xai/grok-build-0.1" "$(cat .ultraswarm-prompt.txt)"`
 - Smoke test: **PASS** — created `hello-opencode.txt` with exact content, unattended.
