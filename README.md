@@ -28,35 +28,40 @@ The point: spend external-CLI tokens on the typing, spend Claude's judgment on t
 
 ## How it works
 
-```
-/ultraswarm <task>
-  │
-  ├─ Phase 0  Decompose (inline Claude, before any Workflow)
-  │     health-check + write-probe each CLI · explore repo · detect & verify gates
-  │     → task list {id, files, cli, risk, acceptance, prompt} → YOU confirm
-  │
-  ├─ Workflow script (authored per-run) — covers Implement + QA, returns {approved, failed}
-  │     ├─ Phase 1  Implement   pipeline() over tasks
-  │     │     each task → a thin Claude wrapper agent that:
-  │     │       creates a git worktree → runs the assigned CLI inside it →
-  │     │       runs the gates (build/test/lint) → returns schema-validated JSON
-  │     │     high-risk tasks fan out to 2 CLIs competing in separate worktrees
-  │     │
-  │     └─ Phase 2  QA   (pipelined — a task's QA starts the moment its code lands)
-  │           routine: mechanical gates + one Claude diff review
-  │           high-risk: judge panel picks the winner → 3-lens adversarial verify
-  │           fail → retry same CLI w/ feedback → reassign to alternate CLI → tombstone
-  │
-  ├─ Phase 3  Merge (inline Claude, sequential, after the Workflow returns)
-  │     apply each approved worktree's diff one at a time · full gate after each
-  │
-  └─ Phase 4  Final verify & report
-        full suite + coverage · per-task table · loud list of anything that failed
+Five phases. Claude runs Phases 0, 3, and 4 itself; Phases 1–2 run inside a Workflow it authors per-run.
+
+```mermaid
+flowchart TD
+    U([/ultraswarm task]) --> P0
+
+    subgraph claude0 [" Claude — inline "]
+        P0["<b>Phase 0 · Decompose</b><br/>health-check + write-probe each CLI<br/>explore repo · detect &amp; verify gates<br/>build task list"]
+        CONF{"You confirm<br/>the plan?"}
+    end
+    P0 --> CONF
+    CONF -- no --> STOP([cancel])
+
+    subgraph wf [" Workflow — authored per-run "]
+        direction TB
+        P1["<b>Phase 1 · Implement</b> &nbsp;(pipeline over tasks)<br/>each task → thin Claude wrapper:<br/>git worktree → run assigned CLI → run gates<br/>high-risk: 2 CLIs compete in separate worktrees"]
+        P2["<b>Phase 2 · QA</b> &nbsp;(starts as each task's code lands)<br/>routine: gates + 1 diff review<br/>high-risk: judge panel → 3-lens adversarial verify<br/>fail → retry w/ feedback → reassign CLI → tombstone"]
+        P1 --> P2
+    end
+    CONF -- yes --> P1
+    P2 --> RET[["returns {approved, failed}"]]
+
+    subgraph claude1 [" Claude — inline "]
+        P3["<b>Phase 3 · Merge</b> &nbsp;(sequential)<br/>apply each approved diff one at a time<br/>full gate after each merge"]
+        P4["<b>Phase 4 · Verify &amp; report</b><br/>full suite + coverage<br/>per-task table · loud failure list"]
+        P3 --> P4
+    end
+    RET --> P3
+    P4 --> DONE([done])
 ```
 
-**Core principle — the role contract:** the external CLIs do *all* feature coding inside throwaway worktrees. Claude decomposes, reviews, judges, merges, and reports. The single exception is the last-resort fail path: if every CLI exhausts its attempts on a task, Claude implements that one task directly — and flags it loudly in the report.
+**The role contract.** External CLIs do *all* feature coding inside throwaway worktrees. Claude decomposes, reviews, judges, merges, and reports — it never writes feature code, with one exception: if every CLI exhausts its attempts on a task, Claude implements that one task directly and flags it loudly in the report.
 
-**Isolation:** every task attempt runs in its own `git worktree` on its own branch. A bad CLI run can't corrupt your working tree or another task's work. Nothing touches your real branch until Phase 3, where Claude merges approved diffs one at a time with a full gate after each.
+**Isolation.** Every task attempt runs in its own `git worktree` on its own branch, so a bad CLI run can't corrupt your working tree or another task's work. Nothing touches your real branch until Phase 3 — and only approved, gate-passing diffs, merged one at a time.
 
 ---
 
@@ -207,30 +212,53 @@ Worktrees and branches are deliberately kept until *after* the final report, so 
 
 ## Worked example
 
-Asking `/ultraswarm` to build two small utilities with tests (a routine, two-task run):
+Asking `/ultraswarm` to build two small utilities with tests — a routine, two-task run. This is the actual shape of the project's end-to-end smoke test.
+
+**Phase 0 — decompose & confirm**
 
 ```
-Phase 0 — health check: codex ✓  grok ✓   (droid dropped: exec broken)
-          gates verified green on base tree: npm test ✓
-          tasks:
-            t1 [routine] codex → src/math.js + test/math.test.js
-            t2 [routine] grok  → src/slugify.js + test/slugify.test.js
-          → confirm? (you approve)
-
-Phase 1/2 — impl:t1:codex#1   → worktree, codex codes, 4/4 tests, review ✓
-            impl:t2:grok#1    → worktree, grok codes, 6/6 tests, review ✓
-
-Phase 3 — merge t1 → npm test ✓ → commit "(ultraswarm: codex)"
-          merge t2 → npm test ✓ → commit "(ultraswarm: grok)"
-
-Phase 4 — full suite 10/10 ✓ · cleanup swept 2 worktrees / 2 branches
-          | task | cli   | attempts | QA  | files                        |
-          | t1   | codex | 1        | ✓   | src/math.js, test/...        |
-          | t2   | grok  | 1        | ✓   | src/slugify.js, test/...     |
-          nothing failed · nothing reassigned · nothing fell back to Claude
+health check:  codex ✓   grok ✓   (droid dropped: exec broken)
+base gates:    npm test ✓ on a clean tree
+plan:          t1  [routine]  codex → src/math.js     + test/math.test.js
+               t2  [routine]  grok  → src/slugify.js  + test/slugify.test.js
+→ you approve
 ```
 
-This is the actual shape of the project's end-to-end smoke test.
+**Phases 1–4 — the two tasks flow through in parallel**
+
+```mermaid
+sequenceDiagram
+    participant C as Claude
+    participant X as codex (t1)
+    participant G as grok (t2)
+
+    Note over C,G: Phase 1–2 · implement + QA (parallel, in worktrees)
+    par t1
+        C->>X: worktree + prompt
+        X-->>C: src/math.js + tests · 4/4 green
+        C->>C: diff review ✓
+    and t2
+        C->>G: worktree + prompt
+        G-->>C: src/slugify.js + tests · 6/6 green
+        C->>C: diff review ✓
+    end
+
+    Note over C: Phase 3 · merge (sequential, gate after each)
+    C->>C: merge t1 → npm test ✓ → commit "(ultraswarm: codex)"
+    C->>C: merge t2 → npm test ✓ → commit "(ultraswarm: grok)"
+
+    Note over C: Phase 4 · verify & report
+    C->>C: full suite 10/10 ✓ · 2 worktrees swept
+```
+
+**Final report**
+
+| task | cli | attempts | QA | files |
+|---|---|---|---|---|
+| t1 | codex | 1 | ✓ | `src/math.js`, `test/math.test.js` |
+| t2 | grok | 1 | ✓ | `src/slugify.js`, `test/slugify.test.js` |
+
+Nothing failed · nothing reassigned · nothing fell back to Claude.
 
 ---
 
