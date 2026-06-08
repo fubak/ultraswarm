@@ -297,6 +297,15 @@ sequenceDiagram
 
 Nothing failed · nothing reassigned · nothing fell back to Claude.
 
+```
+Token accounting (this run, best-effort)
+  Claude — orchestration + QA:   ~48k tokens (+ inline orchestration)
+  External CLIs — coding:        ~140k tokens  (offloaded; provider tokens, not Claude)
+  Est. Claude work offloaded:    ~140k         † proxy estimate, not a measured Claude-token figure
+```
+
+The report ends with a **token-accounting** block: the Claude tokens the run actually cost you (orchestration + QA) vs. the external-CLI tokens that did the coding. The "offloaded" figure is a transparent **proxy estimate** — it counts what the CLIs self-reported (so the real number may be higher) and external tokens aren't Claude-token-equivalent. It shows *where the work went*, not a billing-exact "tokens saved."
+
 ---
 
 ## Configuration reference

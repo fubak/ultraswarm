@@ -118,7 +118,8 @@ const IMPL_SCHEMA = { type:'object', properties:{
   files_changed:{type:'array',items:{type:'string'}},
   gate_results:{type:'array',items:{type:'object',properties:{name:{type:'string'},pass:{type:'boolean'},detail:{type:'string'}},required:['name','pass']}},
   summary:{type:'string'}, concerns:{type:'array',items:{type:'string'}},
-}, required:['status','worktree','branch','files_changed','gate_results','summary','concerns'] }
+  cli_tokens:{type:'number'},  // external CLI's self-reported total tokens for this attempt; 0 if it didn't report (best-effort)
+}, required:['status','worktree','branch','files_changed','gate_results','summary','concerns','cli_tokens'] }
 
 const REVIEW_SCHEMA = { type:'object', properties:{ approve:{type:'boolean'}, issues:{type:'array',items:{type:'string'}} }, required:['approve','issues'] }
 const JUDGE_SCHEMA  = { type:'object', properties:{ score:{type:'number'}, rationale:{type:'string'}, graft_ideas:{type:'array',items:{type:'string'}} }, required:['score','rationale','graft_ideas'] }
@@ -140,11 +141,12 @@ ${t.prompt}${feedback.length ? `
 REVIEWER FEEDBACK FROM PREVIOUS ATTEMPT — fix every item:
 - ${feedback.join('\n- ')}` : ''}
 ---PROMPT END---
-3. Run the CLI inside the worktree (Bash timeout ${cfg.timeouts?.[cli] ?? cfg.timeoutMs}): cd ${wt(t,cli)} && ${cfg.registry[cli]}
+3. Run the CLI inside the worktree (Bash timeout ${cfg.timeouts?.[cli] ?? cfg.timeoutMs}), capturing its full output: cd ${wt(t,cli)} && ${cfg.registry[cli]}
 4. After it exits, run each gate inside the worktree and record pass/fail + a one-line detail:
    ${gateList}
 5. Housekeeping: rm ${wt(t,cli)}/.ultraswarm-prompt.txt, then cd ${wt(t,cli)} && git add -A && git commit -m "ultraswarm: ${t.id} attempt ${attempt}" (commit even if gates failed — the diff must be inspectable).
-6. Return JSON per schema. status "ok" ONLY if the CLI completed AND every gate passed. Do not fix gate failures yourself — report them in gate_results detail and concerns. If the CLI errored immediately: "cli_failed". If you had to kill it: "timeout". List any files the CLI touched outside ${JSON.stringify(t.files)} in concerns. "worktree" must be the absolute path ${wt(t,cli)} — never ~-relative.`
+6. Parse the CLI's self-reported token usage from its output into "cli_tokens" (total tokens — sum input+output if both are given). Patterns vary by CLI: codex prints "tokens used" then a number; droid/grok with JSON output have a "usage" object; others may print "<N> tokens". This is BEST-EFFORT — if the CLI printed no parseable usage, set cli_tokens to 0 (never fail the task over it). cli_tokens is EXTERNAL-CLI tokens, not Claude tokens.
+7. Return JSON per schema. status "ok" ONLY if the CLI completed AND every gate passed. Do not fix gate failures yourself — report them in gate_results detail and concerns. If the CLI errored immediately: "cli_failed". If you had to kill it: "timeout". List any files the CLI touched outside ${JSON.stringify(t.files)} in concerns. "worktree" must be the absolute path ${wt(t,cli)} — never ~-relative.`
 
 const reviewPrompt = (t, impl) => `Review external-CLI work. cd ${impl.worktree} && git diff ${cfg.baseBranch}...${impl.branch}. Task: ${t.description}. Acceptance: ${t.acceptance}.
 Check: (1) acceptance criteria actually met — not just plausible; (2) project convention conformance; (3) no scope creep beyond ${JSON.stringify(t.files)}; (4) no silently swallowed errors; (5) tests verify intent, not hardcoded outputs. approve=false with concrete, actionable issues if anything fails.`
@@ -157,8 +159,11 @@ const LENSES = ['correctness (logic errors, unmet acceptance criteria, broken ed
   'security (hardcoded secrets, unvalidated input, injection, authz gaps, leaky errors)',
   'regression (does existing behavior still work — run the existing test suite)']
 
+let externalTokens = 0   // best-effort sum of external-CLI tokens across ALL attempts (incl. failed)
 async function implement(t, cli, attempt, feedback) {
-  return agent(implPrompt(t, cli, attempt, feedback), { label:`impl:${t.id}:${cli}#${attempt}`, phase:'Implement', schema: IMPL_SCHEMA })
+  const r = await agent(implPrompt(t, cli, attempt, feedback), { label:`impl:${t.id}:${cli}#${attempt}`, phase:'Implement', schema: IMPL_SCHEMA })
+  externalTokens += (r && typeof r.cli_tokens === 'number') ? r.cli_tokens : 0
+  return r
 }
 async function qa(t, impl) {
   if (t.risk !== 'high') {
@@ -239,6 +244,7 @@ const results = (await pipeline(cfg.tasks, t => runTask(t))).filter(Boolean)
 return {
   approved: results.filter(r => !r.failed),
   failed: results.filter(r => r.failed).map(r => r.task),
+  external_tokens: externalTokens,   // best-effort total external-CLI tokens (the coding offloaded from Claude)
 }
 ```
 
@@ -265,6 +271,18 @@ git worktree remove --force <worktree> && git branch -D <branch>
 
 1. Full test suite + coverage (80% floor) + lint on the merged tree.
 2. Report table: task · CLI used · attempts · QA verdict · files. Then, loudly: tasks that failed entirely, tasks Claude had to implement directly (last-resort fail path), conflicts resolved and how, grafts applied, CLIs dropped at health check. Never report done unless the final gate passed.
+3. **Token accounting** — add this block using two MEASURED numbers and one clearly-labelled estimate. Do NOT invent precision.
+   - **Claude (orchestration + QA):** the Workflow run's reported subagent token total (shown in its completion notification as `subagent_tokens`). This is what the run cost *you* in Claude — the wrapper, review, judge, and verify agents. (Phase 0/3/4 inline work adds a little more; note it as "+ inline orchestration" rather than guessing a number.)
+   - **External CLIs (coding):** `external_tokens` from the Workflow return — the coding work that ran on the external providers' tokens, not Claude's. Best-effort: it sums only what each CLI self-reported, so the true figure may be higher; say so.
+   - **Est. Claude work offloaded:** report the external-CLI total as a **proxy estimate** for the coding Claude did not have to do, with this caveat verbatim or close: *"proxy estimate — the bulk coding ran on external CLIs; a Claude-native build would consume a different number of Claude tokens."* Never present it as an exact measured "Claude tokens saved".
+   - Suggested format:
+     ```
+     Token accounting (this run, best-effort)
+       Claude — orchestration + QA:   ~<subagent_tokens> tokens (+ inline orchestration)
+       External CLIs — coding:        ~<external_tokens> tokens  (offloaded; provider tokens, not Claude)
+       Est. Claude work offloaded:    ~<external_tokens>         † proxy estimate, not a measured Claude-token figure
+     ```
+   - If `external_tokens` is 0 or only some CLIs reported, state that token capture was partial/unavailable rather than implying zero offload.
 
 ## Failure handling
 
