@@ -3,12 +3,14 @@
 Date: 2026-06-07
 Purpose: source of truth for the `/ultraswarm` worker registry. Each entry records the exact verified one-shot invocation (prompt passed via `"$(cat .ultraswarm-prompt.txt)"`), smoke-test result, and quirks.
 
+Global precondition: every invocation string below assumes the current working directory is the worker's git worktree, containing `.ultraswarm-prompt.txt`. `cd` there first (or use the per-CLI `--cwd`/`--dir` flag where noted).
+
 ## Summary
 
 | CLI | Version | Status | Smoke test |
 |-----|---------|--------|------------|
-| codex | codex-cli 0.137.0 | enabled | not run (help-verified per task spec) |
-| gemini | 0.45.2 | enabled | not run (help-verified per task spec) |
+| codex | codex-cli 0.137.0 | enabled | not run (help-verified per docs/plans/2026-06-07-ultraswarm.md Task 1) |
+| gemini | 0.45.2 | enabled | not run (help-verified per docs/plans/2026-06-07-ultraswarm.md Task 1) |
 | grok | 0.2.33 (c0ddec061) | enabled | PASS |
 | agy | 1.0.6 | enabled | PASS |
 | droid | 0.142.0 | **disabled** | FAIL — not authenticated |
@@ -18,9 +20,9 @@ Purpose: source of truth for the `/ultraswarm` worker registry. Each entry recor
 
 - Version: `codex-cli 0.137.0`
 - Invocation: `codex exec --full-auto "$(cat .ultraswarm-prompt.txt)"`
-- Smoke test: not run (flags known-good per task spec; help-output confirmation only).
+- Smoke test: not run (flags known-good; docs/plans/2026-06-07-ultraswarm.md Task 1 says help-output confirmation suffices for codex and gemini).
 - Quirks:
-  - `--full-auto` is **hidden from `codex exec --help`** in 0.137.0 but still accepted (verified: `codex exec --full-auto --help` exits 0; an unknown flag would error). If it is removed in a future version, the explicit equivalent is `codex exec --sandbox workspace-write "$(cat .ultraswarm-prompt.txt)"` (sandbox modes: `read-only`, `workspace-write`, `danger-full-access`; `exec` is non-interactive so no approval prompts).
+  - `--full-auto` is **hidden from `codex exec --help`** in 0.137.0 but still accepted (`codex exec --full-auto --help` exits 0 — strong evidence the flag parses, since clap normally rejects unknown flags, but flag acceptance was not exercised in a real run here). If it is removed in a future version, the explicit equivalent is `codex exec --sandbox workspace-write "$(cat .ultraswarm-prompt.txt)"` (sandbox modes: `read-only`, `workspace-write`, `danger-full-access`; `exec` is non-interactive so no approval prompts).
   - Prompt is a positional arg; `-` or piped stdin also works.
   - `--skip-git-repo-check` available if running outside a git repo.
   - `-o, --output-last-message <FILE>` writes only the final message to a file — useful for parsing results.
@@ -29,9 +31,9 @@ Purpose: source of truth for the `/ultraswarm` worker registry. Each entry recor
 
 - Version: `0.45.2`
 - Invocation: `gemini --yolo -p "$(cat .ultraswarm-prompt.txt)"`
-- Smoke test: not run (flags known-good per task spec; help-output confirmation only).
+- Smoke test: not run (flags known-good; docs/plans/2026-06-07-ultraswarm.md Task 1 says help-output confirmation suffices for codex and gemini).
 - Quirks:
-  - `-p/--prompt` is required for non-interactive (headless) mode; a bare positional query starts interactive mode and will hang.
+  - `-p/--prompt` is required for non-interactive (headless) mode. Per the help text ("Defaults to interactive mode. Use -p/--prompt for non-interactive"), a bare positional query starts interactive mode — expected to hang an unattended worker, though this was not exercised here. Always include `-p`.
   - `-y/--yolo` auto-approves all actions; `--approval-mode yolo` is the equivalent long form (`auto_edit` available if only file edits should be auto-approved).
 
 ## grok (enabled)
@@ -48,10 +50,10 @@ Purpose: source of truth for the `/ultraswarm` worker registry. Each entry recor
 ## agy (enabled)
 
 - Version: `1.0.6`
-- Invocation: `agy -p "$(cat .ultraswarm-prompt.txt)"`
+- Invocation: `agy --print-timeout 15m -p "$(cat .ultraswarm-prompt.txt)"`
 - Smoke test: **PASS** — created `hello-agy.txt` with exact content, unattended, with **no permission flag at all** (plain `-p`/`--print` performed file writes without prompting).
 - Quirks:
-  - `-p/--print` runs a single prompt non-interactively. Default `--print-timeout` is 5m; raise it for long tasks (e.g. `--print-timeout 15m`).
+  - `-p/--print` runs a single prompt non-interactively. Default `--print-timeout` is **5m — below the 10-min worker budget**, which is why the canonical invocation above bakes in `--print-timeout 15m`. Do not drop it when copying.
   - `--dangerously-skip-permissions` is agy's named auto-approve flag, but it was NOT verified here (this environment's policy forbids `--dangerously-*` flags) and was not needed for file writes. If a worker run stalls on a permission request in print mode, that flag is the documented escape hatch — decide policy at integration time.
   - No `--cwd` flag; must `cd` into the work directory first.
 
@@ -79,6 +81,8 @@ Purpose: source of truth for the `/ultraswarm` worker registry. Each entry recor
 
 ## Cross-cutting notes for the registry
 
+- **The plan's Task 2 template rows for gemini and opencode are stale — replace them with the invocations in this file as well (gemini needs `-p`; opencode model is `xai/grok-build-0.1`).** Task 2 of `docs/plans/2026-06-07-ultraswarm.md` instructs substituting only the grok and agy rows from this file, but its hardcoded template has `gemini --yolo "$(cat .ultraswarm-prompt.txt)"` (missing `-p`, so it would start interactive mode) and `opencode run --agent build -m "opencode/grok-code" ...` (model no longer exists; fails with UnknownError).
+- **Alternates map while droid is disabled**: the plan's example map routes codex→droid, which is currently dead. Recommended map over the five healthy CLIs: `{ codex:'grok', gemini:'codex', grok:'opencode', agy:'grok', opencode:'codex' }`. Revisit when droid is authenticated and re-verified.
 - All pass/fail verdicts above were verified by inspecting the artifact files the CLIs created (exact content match), not by exit codes. Exit codes were not independently characterized for grok/agy success paths — orchestrator should verify worker output via artifacts (files, commits) rather than trusting exit codes.
 - Smoke tests ran in a fresh `git init` directory (`/tmp/cli-smoke`, since removed); none of the four tested CLIs required interactive input or hung.
 - Each tested CLI completed the trivial task in well under 180 s.
