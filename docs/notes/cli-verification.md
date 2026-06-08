@@ -86,3 +86,11 @@ Global precondition: every invocation string below assumes the current working d
 - All pass/fail verdicts above were verified by inspecting the artifact files the CLIs created (exact content match), not by exit codes. Exit codes were not independently characterized for grok/agy success paths — orchestrator should verify worker output via artifacts (files, commits) rather than trusting exit codes.
 - Smoke tests ran in a fresh `git init` directory (`/tmp/cli-smoke`, since removed); none of the four tested CLIs required interactive input or hung.
 - Each tested CLI completed the trivial task in well under 180 s.
+
+## E2E smoke-test findings (2026-06-07, ultraswarm-e2e run)
+
+- **codex 0.137.0 — FAILED write probe; do not route until re-verified.** Authenticated (`codex login status` → "Logged in using ChatGPT"), but: (a) in a linked git worktree, `codex exec --full-auto` fails every write — "the workspace sandbox rejected all writes due to a `bwrap` permission failure" (reproduced; produced 3 empty attempts in the e2e); (b) in fresh plain repos (/tmp and $HOME), `codex exec` hung until a 180–240s timeout with no output. Re-probe after a codex upgrade or sandbox config change before enabling. A `--sandbox`/`writable_roots` workaround was not validated.
+- **agy 1.0.6 — PASSED a write probe inside a linked worktree** (created exact-content file via `-p`). Worktree routing verified, not just plain-repo.
+- **grok 0.2.33 — verified end-to-end in worktrees**: created correct implementation + tests on attempt 1 of the first e2e run (rejected only because the project's gate command was broken, not its code).
+- **Environment quirk (not a CLI quirk): Node 26 `node --test test/` does NOT do directory discovery** — it resolves `test/` as a module and crashes MODULE_NOT_FOUND. Use bare `node --test`. A broken gate like this poisons every wrapper/QA cycle; SKILL.md Phase 0 now requires verifying gates green on the base tree before any Workflow launch.
+- **Workflow `args` may arrive as a JSON string** depending on the caller — the SKILL.md template now validates at the boundary (`const cfg = typeof args === 'string' ? JSON.parse(args) : args`).

@@ -11,7 +11,7 @@ description: Orchestrate external AI CLIs (codex, gemini, grok, agy, droid, open
 
 | CLI | Invocation (run inside the worktree) | Specialty | Timeout |
 |---|---|---|---|
-| codex | `codex exec --full-auto "$(cat .ultraswarm-prompt.txt)"` | Backend, logic, algorithms, debugging | 10 min |
+| codex | `codex exec --full-auto "$(cat .ultraswarm-prompt.txt)"` ⚠️ failed write probe 2026-06-07: bwrap sandbox rejects all writes in linked worktrees, and exec hangs in fresh repos (while authenticated). Re-probe before routing. | Backend, logic, algorithms, debugging | 10 min |
 | gemini | `gemini --yolo -p "$(cat .ultraswarm-prompt.txt)"` | Frontend, UI, CSS, components | 10 min |
 | droid | **DISABLED — not authenticated (FACTORY_API_KEY/login required)**; excluded from routing; re-verify steps live in docs/notes/cli-verification.md | General full-stack implementation, refactoring | 10 min |
 | grok | `grok --always-approve -p "$(cat .ultraswarm-prompt.txt)"` | Tests, refactors, general | 10 min |
@@ -27,13 +27,14 @@ Worktrees: `~/worktrees/<reponame>-us-<taskid>-<cli>`, branch `ultraswarm/<taski
 
 ## Phase 0 — Decompose (inline, before any Workflow)
 
-1. **Health check:** run `<cli> --version` for every registry row. Skip rows marked DISABLED; `--version` does not verify authentication. Drop broken CLIs from routing and TELL THE USER which were dropped. If fewer than 2 CLIs are healthy, stop and report — do not fall back to Claude-coded work silently.
+1. **Health check:** run `<cli> --version` for every registry row. Skip rows marked DISABLED; `--version` does not verify authentication. Then, for each CLI that will receive tasks, run a **write probe**: create a scratch linked worktree of the target repo, have the CLI create one trivial file there, verify the artifact exists, remove the worktree. `--version` proves presence, not the ability to write — sandboxed CLIs can fail every write inside linked worktrees while appearing healthy (e2e-verified 2026-06-07: codex's bwrap sandbox did exactly this). Drop broken CLIs from routing and TELL THE USER which were dropped. If fewer than 2 CLIs are healthy, stop and report — do not fall back to Claude-coded work silently.
 2. **Explore the target repo:** structure, conventions, tech stack. Detect the gate commands (build, typecheck, test, lint) from package.json / Makefile / CI config. If there is no test command, say so loudly and ask whether to proceed (QA loses its mechanical tier).
 3. **Decompose** into 3–10 tasks: `{id, description, files, cli, risk, acceptance, prompt}`.
    - `risk: "high"` if the task touches auth/security/payments, changes shared interfaces or data models, has architectural impact, or modifies logic with no existing test coverage. Otherwise `"routine"`.
    - Route by specialty (table above). Tasks should be independent; if two tasks must touch the same file, merge them into one task.
    - `prompt` must be **fully self-contained** — external CLIs have zero conversation context. Include: project name + tech stack, exact file paths, conventions to follow (naming, error handling, immutability), the expected outcome, constraints ("do not modify files outside <list>", "do not add dependencies"), and the acceptance criteria including the exact test command that must pass.
-4. **Present the task table to the user and get explicit confirmation.** This confirmation is the Workflow opt-in gate — never launch the Workflow without it.
+4. **Verify the gates on the base tree:** run every gate command at the repo root and require green exits before any Workflow launch. A gate that fails or errors on the base tree poisons every QA cycle — wrappers report `gates_failed` regardless of what the CLI wrote, and workers flail trying to satisfy an unsatisfiable command (e2e-verified 2026-06-07: a Node-26-incompatible test script tombstoned every task). Fix the gate or drop it (with the user's confirmation) first.
+5. **Present the task table to the user and get explicit confirmation.** This confirmation is the Workflow opt-in gate — never launch the Workflow without it.
 
 ## Phases 1–2 — Workflow Script Template
 
@@ -48,7 +49,10 @@ export const meta = {
     { title: 'QA', detail: 'routine: diff review · high: judge panel + 3-lens adversarial' },
   ],
 }
-// args: {
+// The runtime exposes the input as the global `args` — but it may arrive as a JSON
+// string depending on the caller. Validate at the boundary (e2e-verified 2026-06-07):
+const cfg = typeof args === 'string' ? JSON.parse(args) : args
+// cfg: {
 //   repo: '/abs/path', repoName: 'name',
 //   baseBranch: 'main',  // base SHA or branch captured at Phase 0 — worktrees branch from it, all QA diffs review against it
 //   worktreeRoot: '/home/<user>/worktrees',  // absolute path — never ~ (must round-trip through agents and git verbatim)
@@ -71,15 +75,15 @@ const REVIEW_SCHEMA = { type:'object', properties:{ approve:{type:'boolean'}, is
 const JUDGE_SCHEMA  = { type:'object', properties:{ score:{type:'number'}, rationale:{type:'string'}, graft_ideas:{type:'array',items:{type:'string'}} }, required:['score','rationale','graft_ideas'] }
 const VERDICT_SCHEMA = { type:'object', properties:{ refuted:{type:'boolean'}, reasons:{type:'array',items:{type:'string'}} }, required:['refuted','reasons'] }
 
-const wt = (t, cli) => `${args.worktreeRoot}/${args.repoName}-us-${t.id}-${cli}`
+const wt = (t, cli) => `${cfg.worktreeRoot}/${cfg.repoName}-us-${t.id}-${cli}`
 const br = (t, cli) => `ultraswarm/${t.id}-${cli}`
-const gateList = args.gates.map(g => `${g.name}: ${g.cmd}`).join('\n   ')
+const gateList = cfg.gates.map(g => `${g.name}: ${g.cmd}`).join('\n   ')
 
 const implPrompt = (t, cli, attempt, feedback) => `You are a THIN WRAPPER around an external coding CLI. You do NOT write or fix feature code yourself — your only file edits are housekeeping named below.
 
-Repo: ${args.repo} · Task: ${t.id} — ${t.description} · Attempt ${attempt}
+Repo: ${cfg.repo} · Task: ${t.id} — ${t.description} · Attempt ${attempt}
 
-1. Worktree: if ${wt(t,cli)} does not exist, run: cd ${args.repo} && git worktree add ${wt(t,cli)} -b ${br(t,cli)} ${args.baseBranch} (if the branch exists from a previous attempt, omit the -b flag and the ${args.baseBranch} argument but keep the branch name as the final argument: git worktree add ${wt(t,cli)} ${br(t,cli)}). If it exists, use it as-is.
+1. Worktree: if ${wt(t,cli)} does not exist, run: cd ${cfg.repo} && git worktree add ${wt(t,cli)} -b ${br(t,cli)} ${cfg.baseBranch} (if the branch exists from a previous attempt, omit the -b flag and the ${cfg.baseBranch} argument but keep the branch name as the final argument: git worktree add ${wt(t,cli)} ${br(t,cli)}). If it exists, use it as-is.
 2. Write the following CLI prompt VERBATIM to ${wt(t,cli)}/.ultraswarm-prompt.txt:
 ---PROMPT START---
 ${t.prompt}${feedback.length ? `
@@ -87,18 +91,18 @@ ${t.prompt}${feedback.length ? `
 REVIEWER FEEDBACK FROM PREVIOUS ATTEMPT — fix every item:
 - ${feedback.join('\n- ')}` : ''}
 ---PROMPT END---
-3. Run the CLI inside the worktree (Bash timeout ${args.timeoutMs}): cd ${wt(t,cli)} && ${args.registry[cli]}
+3. Run the CLI inside the worktree (Bash timeout ${cfg.timeoutMs}): cd ${wt(t,cli)} && ${cfg.registry[cli]}
 4. After it exits, run each gate inside the worktree and record pass/fail + a one-line detail:
    ${gateList}
 5. Housekeeping: rm ${wt(t,cli)}/.ultraswarm-prompt.txt, then cd ${wt(t,cli)} && git add -A && git commit -m "ultraswarm: ${t.id} attempt ${attempt}" (commit even if gates failed — the diff must be inspectable).
 6. Return JSON per schema. status "ok" ONLY if the CLI completed AND every gate passed. Do not fix gate failures yourself — report them in gate_results detail and concerns. If the CLI errored immediately: "cli_failed". If you had to kill it: "timeout". List any files the CLI touched outside ${JSON.stringify(t.files)} in concerns. "worktree" must be the absolute path ${wt(t,cli)} — never ~-relative.`
 
-const reviewPrompt = (t, impl) => `Review external-CLI work. cd ${impl.worktree} && git diff ${args.baseBranch}...${impl.branch}. Task: ${t.description}. Acceptance: ${t.acceptance}.
+const reviewPrompt = (t, impl) => `Review external-CLI work. cd ${impl.worktree} && git diff ${cfg.baseBranch}...${impl.branch}. Task: ${t.description}. Acceptance: ${t.acceptance}.
 Check: (1) acceptance criteria actually met — not just plausible; (2) project convention conformance; (3) no scope creep beyond ${JSON.stringify(t.files)}; (4) no silently swallowed errors; (5) tests verify intent, not hardcoded outputs. approve=false with concrete, actionable issues if anything fails.`
 
-const judgePrompt = (t, impl) => `Score this implementation 0-10. cd ${impl.worktree} && git diff ${args.baseBranch}...${impl.branch}. Task: ${t.description}. Acceptance: ${t.acceptance}. Criteria: correctness (50%), simplicity (30%), convention fit (20%). List graft_ideas: anything this attempt does well that a competing attempt might lack.`
+const judgePrompt = (t, impl) => `Score this implementation 0-10. cd ${impl.worktree} && git diff ${cfg.baseBranch}...${impl.branch}. Task: ${t.description}. Acceptance: ${t.acceptance}. Criteria: correctness (50%), simplicity (30%), convention fit (20%). List graft_ideas: anything this attempt does well that a competing attempt might lack.`
 
-const lensPrompt = (lens, t, impl) => `ADVERSARIAL REVIEW — try to REFUTE this work via the ${lens} lens. cd ${impl.worktree} && git diff ${args.baseBranch}...${impl.branch}. Task: ${t.description}. Acceptance: ${t.acceptance}. Run commands/tests in the worktree if needed to prove a failure. Default refuted=true if you find a real problem; refuted=false only if it survives scrutiny. reasons must be concrete.`
+const lensPrompt = (lens, t, impl) => `ADVERSARIAL REVIEW — try to REFUTE this work via the ${lens} lens. cd ${impl.worktree} && git diff ${cfg.baseBranch}...${impl.branch}. Task: ${t.description}. Acceptance: ${t.acceptance}. Run commands/tests in the worktree if needed to prove a failure. Default refuted=true if you find a real problem; refuted=false only if it survives scrutiny. reasons must be concrete.`
 
 const LENSES = ['correctness (logic errors, unmet acceptance criteria, broken edge cases)',
   'security (hardcoded secrets, unvalidated input, injection, authz gaps, leaky errors)',
@@ -142,7 +146,7 @@ async function attemptLoop(t, cli, maxAttempts, seedFeedback, attemptOffset = 0)
 }
 async function runTask(t) {
   if (t.risk === 'high') {
-    const clis = [t.cli, args.alternates[t.cli]]
+    const clis = [t.cli, cfg.alternates[t.cli]]
     log(`${t.id} (high risk): competing on ${clis.join(' vs ')}`)
     const all = (await parallel(clis.map(c => () =>
       implement(t, c, 1, []).then(i => i && { ...i, cli: c })))).filter(Boolean)
@@ -169,20 +173,20 @@ async function runTask(t) {
     }
     const retried = await attemptLoop(t, retryCli, 2, seed, 1)   // attempts 2-3 on the winning CLI's worktree
     if (!retried.exhausted) return { ...retried, graft }
-    log(`${t.id} (high risk): ${retryCli} exhausted, reassigning to ${args.alternates[retryCli]}`)
-    const fallback = await attemptLoop(t, args.alternates[retryCli], 2,
+    log(`${t.id} (high risk): ${retryCli} exhausted, reassigning to ${cfg.alternates[retryCli]}`)
+    const fallback = await attemptLoop(t, cfg.alternates[retryCli], 2,
       [...retried.feedback, `prior CLI (${retryCli}) failed all attempts on this task`], 3)   // attempts 4-5
     return fallback.exhausted ? { task: t.id, failed: true } : { ...fallback, graft }
   }
   const primary = await attemptLoop(t, t.cli, 3, [])
   if (!primary.exhausted) return primary
-  log(`${t.id}: ${t.cli} exhausted, reassigning to ${args.alternates[t.cli]}`)
-  const fallback = await attemptLoop(t, args.alternates[t.cli], 2,
+  log(`${t.id}: ${t.cli} exhausted, reassigning to ${cfg.alternates[t.cli]}`)
+  const fallback = await attemptLoop(t, cfg.alternates[t.cli], 2,
     [...primary.feedback, `prior CLI (${t.cli}) failed all attempts on this task`], 3)   // attempts 4-5
   return fallback.exhausted ? { task: t.id, failed: true } : fallback
 }
 
-const results = (await pipeline(args.tasks, t => runTask(t))).filter(Boolean)
+const results = (await pipeline(cfg.tasks, t => runTask(t))).filter(Boolean)
 return {
   approved: results.filter(r => !r.failed),
   failed: results.filter(r => r.failed).map(r => r.task),
@@ -197,7 +201,7 @@ Require a clean working tree (`git status --porcelain` empty) before the first m
 
 ```bash
 cd <repo>
-git merge --squash <branch>           # or: git diff $(git merge-base <baseBranch> <branch>) <branch> | git apply   (<baseBranch> = the Workflow's args.baseBranch)
+git merge --squash <branch>           # or: git diff $(git merge-base <baseBranch> <branch>) <branch> | git apply   (<baseBranch> = the Workflow's cfg.baseBranch)
 # run EVERY gate (build, typecheck, test, lint)
 git commit -m "feat: <task summary> (ultraswarm: <cli>)"
 git worktree remove --force <worktree> && git branch -D <branch>
@@ -217,7 +221,8 @@ git worktree remove --force <worktree> && git branch -D <branch>
 
 | Failure | Response |
 |---|---|
-| CLI missing/broken at health check | Drop from routing, tell the user |
+| CLI missing/broken at health check or write probe | Drop from routing, tell the user |
+| Gate fails on the base tree | Caught in Phase 0 — never launch the Workflow against a broken gate |
 | CLI timeout / crash mid-task | Counts as failed attempt → retry/reassign path |
 | Wrapper agent dies (null) | Same as failed attempt |
 | All CLIs exhausted on a task | Claude implements it directly — flagged in report |
