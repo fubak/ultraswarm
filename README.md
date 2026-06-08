@@ -87,7 +87,7 @@ If you just want to fan a couple of CLIs at independent subtasks with minimal ce
   |---|---|---|
   | [codex](https://github.com/openai/codex) | `npm i -g @openai/codex` | `codex login` |
   | [gemini](https://github.com/google-gemini/gemini-cli) | `npm i -g @google/gemini-cli` | `gemini` (interactive login) |
-  | grok | xAI Grok CLI (standalone `grok` binary on `PATH`) | `grok login` (OAuth via auth.x.ai) |
+  | grok | [xAI Grok CLI](https://x.ai/cli) (standalone `grok` binary on `PATH`) | `grok login` (OAuth via auth.x.ai) |
   | agy | [Google Antigravity](https://antigravity.google) CLI (standalone `agy` binary) | Sign in to Antigravity (Google account) |
   | [droid](https://factory.ai) | Factory CLI | `FACTORY_API_KEY` / login |
   | [opencode](https://github.com/sst/opencode) | `npm i -g opencode-ai` | provider key (e.g. xAI) |
