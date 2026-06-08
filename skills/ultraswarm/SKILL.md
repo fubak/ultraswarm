@@ -27,7 +27,7 @@ Worktrees: `~/worktrees/<reponame>-us-<taskid>-<cli>`, branch `ultraswarm/<taski
 
 ## Phase 0 — Decompose (inline, before any Workflow)
 
-1. **Health check:** run `<cli> --version` for every registry row. Drop broken CLIs from routing and TELL THE USER which were dropped. If fewer than 2 CLIs are healthy, stop and report — do not fall back to Claude-coded work silently.
+1. **Health check:** run `<cli> --version` for every registry row. Skip rows marked DISABLED; `--version` does not verify authentication. Drop broken CLIs from routing and TELL THE USER which were dropped. If fewer than 2 CLIs are healthy, stop and report — do not fall back to Claude-coded work silently.
 2. **Explore the target repo:** structure, conventions, tech stack. Detect the gate commands (build, typecheck, test, lint) from package.json / Makefile / CI config. If there is no test command, say so loudly and ask whether to proceed (QA loses its mechanical tier).
 3. **Decompose** into 3–10 tasks: `{id, description, files, cli, risk, acceptance, prompt}`.
    - `risk: "high"` if the task touches auth/security/payments, changes shared interfaces or data models, has architectural impact, or modifies logic with no existing test coverage. Otherwise `"routine"`.
@@ -50,6 +50,8 @@ export const meta = {
 }
 // args: {
 //   repo: '/abs/path', repoName: 'name',
+//   baseBranch: 'main',  // base SHA or branch captured at Phase 0 — worktrees branch from it, all QA diffs review against it
+//   worktreeRoot: '/home/<user>/worktrees',  // absolute path — never ~ (must round-trip through agents and git verbatim)
 //   gates: [{name:'build',cmd:'npm run build'},{name:'test',cmd:'npm test'}, ...],
 //   registry: { codex: 'codex exec --full-auto "$(cat .ultraswarm-prompt.txt)"', ... },
 //   alternates: { codex:'grok', gemini:'codex', grok:'opencode', agy:'grok', opencode:'codex' },  // adapt to healthy CLIs in Phase 0
@@ -69,7 +71,7 @@ const REVIEW_SCHEMA = { type:'object', properties:{ approve:{type:'boolean'}, is
 const JUDGE_SCHEMA  = { type:'object', properties:{ score:{type:'number'}, rationale:{type:'string'}, graft_ideas:{type:'array',items:{type:'string'}} }, required:['score','rationale','graft_ideas'] }
 const VERDICT_SCHEMA = { type:'object', properties:{ refuted:{type:'boolean'}, reasons:{type:'array',items:{type:'string'}} }, required:['refuted','reasons'] }
 
-const wt = (t, cli) => `~/worktrees/${args.repoName}-us-${t.id}-${cli}`
+const wt = (t, cli) => `${args.worktreeRoot}/${args.repoName}-us-${t.id}-${cli}`
 const br = (t, cli) => `ultraswarm/${t.id}-${cli}`
 const gateList = args.gates.map(g => `${g.name}: ${g.cmd}`).join('\n   ')
 
@@ -77,7 +79,7 @@ const implPrompt = (t, cli, attempt, feedback) => `You are a THIN WRAPPER around
 
 Repo: ${args.repo} · Task: ${t.id} — ${t.description} · Attempt ${attempt}
 
-1. Worktree: if ${wt(t,cli)} does not exist, run: cd ${args.repo} && git worktree add ${wt(t,cli)} -b ${br(t,cli)} (if the branch exists from a previous attempt, omit -b). If it exists, use it as-is.
+1. Worktree: if ${wt(t,cli)} does not exist, run: cd ${args.repo} && git worktree add ${wt(t,cli)} -b ${br(t,cli)} ${args.baseBranch} (if the branch exists from a previous attempt, omit the -b flag and the ${args.baseBranch} argument but keep the branch name as the final argument: git worktree add ${wt(t,cli)} ${br(t,cli)}). If it exists, use it as-is.
 2. Write the following CLI prompt VERBATIM to ${wt(t,cli)}/.ultraswarm-prompt.txt:
 ---PROMPT START---
 ${t.prompt}${feedback.length ? `
@@ -89,14 +91,14 @@ REVIEWER FEEDBACK FROM PREVIOUS ATTEMPT — fix every item:
 4. After it exits, run each gate inside the worktree and record pass/fail + a one-line detail:
    ${gateList}
 5. Housekeeping: rm ${wt(t,cli)}/.ultraswarm-prompt.txt, then cd ${wt(t,cli)} && git add -A && git commit -m "ultraswarm: ${t.id} attempt ${attempt}" (commit even if gates failed — the diff must be inspectable).
-6. Return JSON per schema. status "ok" ONLY if the CLI completed AND every gate passed. Do not fix gate failures yourself — report them in gate_results detail and concerns. If the CLI errored immediately: "cli_failed". If you had to kill it: "timeout". List any files the CLI touched outside ${JSON.stringify(t.files)} in concerns.`
+6. Return JSON per schema. status "ok" ONLY if the CLI completed AND every gate passed. Do not fix gate failures yourself — report them in gate_results detail and concerns. If the CLI errored immediately: "cli_failed". If you had to kill it: "timeout". List any files the CLI touched outside ${JSON.stringify(t.files)} in concerns. "worktree" must be the absolute path ${wt(t,cli)} — never ~-relative.`
 
-const reviewPrompt = (t, impl) => `Review external-CLI work. cd ${impl.worktree} && git diff main...${impl.branch} (use merge-base if main is not the base). Task: ${t.description}. Acceptance: ${t.acceptance}.
+const reviewPrompt = (t, impl) => `Review external-CLI work. cd ${impl.worktree} && git diff ${args.baseBranch}...${impl.branch}. Task: ${t.description}. Acceptance: ${t.acceptance}.
 Check: (1) acceptance criteria actually met — not just plausible; (2) project convention conformance; (3) no scope creep beyond ${JSON.stringify(t.files)}; (4) no silently swallowed errors; (5) tests verify intent, not hardcoded outputs. approve=false with concrete, actionable issues if anything fails.`
 
-const judgePrompt = (t, impl) => `Score this implementation 0-10. cd ${impl.worktree} && git diff main...${impl.branch}. Task: ${t.description}. Acceptance: ${t.acceptance}. Criteria: correctness (50%), simplicity (30%), convention fit (20%). List graft_ideas: anything this attempt does well that a competing attempt might lack.`
+const judgePrompt = (t, impl) => `Score this implementation 0-10. cd ${impl.worktree} && git diff ${args.baseBranch}...${impl.branch}. Task: ${t.description}. Acceptance: ${t.acceptance}. Criteria: correctness (50%), simplicity (30%), convention fit (20%). List graft_ideas: anything this attempt does well that a competing attempt might lack.`
 
-const lensPrompt = (lens, t, impl) => `ADVERSARIAL REVIEW — try to REFUTE this work via the ${lens} lens. cd ${impl.worktree} && git diff main...${impl.branch}. Task: ${t.description}. Acceptance: ${t.acceptance}. Run commands/tests in the worktree if needed to prove a failure. Default refuted=true if you find a real problem; refuted=false only if it survives scrutiny. reasons must be concrete.`
+const lensPrompt = (lens, t, impl) => `ADVERSARIAL REVIEW — try to REFUTE this work via the ${lens} lens. cd ${impl.worktree} && git diff ${args.baseBranch}...${impl.branch}. Task: ${t.description}. Acceptance: ${t.acceptance}. Run commands/tests in the worktree if needed to prove a failure. Default refuted=true if you find a real problem; refuted=false only if it survives scrutiny. reasons must be concrete.`
 
 const LENSES = ['correctness (logic errors, unmet acceptance criteria, broken edge cases)',
   'security (hardcoded secrets, unvalidated input, injection, authz gaps, leaky errors)',
@@ -113,14 +115,22 @@ async function qa(t, impl) {
   const votes = (await parallel(LENSES.map(l => () =>
     agent(lensPrompt(l, t, impl), { label:`verify:${t.id}:${l.split(' ')[0]}`, phase:'QA', schema: VERDICT_SCHEMA })))).filter(Boolean)
   const ok = votes.filter(v => !v.refuted).length >= 2
-  return { approve: ok, issues: votes.filter(v => v.refuted).flatMap(v => v.reasons) }
+  const issues = [
+    ...votes.filter(v => v.refuted).flatMap(v => v.reasons),
+    ...(votes.length < 2 ? ['adversarial verification could not complete'] : []),
+  ]
+  return { approve: ok, issues }
 }
-async function attemptLoop(t, cli, maxAttempts, seedFeedback) {
+async function attemptLoop(t, cli, maxAttempts, seedFeedback, attemptOffset = 0) {
   let feedback = seedFeedback
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  for (let n = 1; n <= maxAttempts; n++) {
+    const attempt = attemptOffset + n
     const impl = await implement(t, cli, attempt, feedback)
     if (!impl || impl.status !== 'ok') {
-      feedback = [...feedback, `attempt ${attempt} (${cli}): ${impl ? `${impl.status} — ${impl.summary}` : 'wrapper agent died'}`]
+      const gates = impl ? impl.gate_results.filter(g => !g.pass).map(g => `${g.name}: ${g.detail || 'failed'}`).join('; ') : ''
+      feedback = [...feedback, impl
+        ? `attempt ${attempt} (${cli}): ${impl.status} — ${impl.summary}${gates ? ` · failing gates: ${gates}` : ''}`
+        : `attempt ${attempt} (${cli}): wrapper agent died`]
       continue
     }
     const verdict = await qa(t, impl)
@@ -128,33 +138,43 @@ async function attemptLoop(t, cli, maxAttempts, seedFeedback) {
     feedback = [...feedback, ...verdict.issues]
     log(`${t.id}: attempt ${attempt} on ${cli} rejected (${verdict.issues.length} issues)`)
   }
-  return null
+  return { exhausted: true, feedback }
 }
 async function runTask(t) {
   if (t.risk === 'high') {
     const clis = [t.cli, args.alternates[t.cli]]
     log(`${t.id} (high risk): competing on ${clis.join(' vs ')}`)
-    const impls = (await parallel(clis.map(c => () => implement(t, c, 1, [])))).filter(Boolean).filter(i => i.status === 'ok')
+    const impls = (await parallel(clis.map(c => () =>
+      implement(t, c, 1, []).then(i => i && { ...i, cli: c })))).filter(Boolean).filter(i => i.status === 'ok')
     let winner = impls[0], graft = []
     if (impls.length > 1) {
       const scores = (await parallel(impls.map(i => () =>
-        agent(judgePrompt(t, i), { label:`judge:${t.id}`, phase:'QA', schema: JUDGE_SCHEMA }).then(s => ({ i, s }))))).filter(x => x && x.s)
+        agent(judgePrompt(t, i), { label:`judge:${t.id}:${i.cli}`, phase:'QA', schema: JUDGE_SCHEMA }).then(s => ({ i, s }))))).filter(x => x && x.s)
       scores.sort((a, b) => b.s.score - a.s.score)
       winner = scores[0]?.i ?? winner
       graft = scores.slice(1).flatMap(x => x.s.graft_ideas)
     }
+    let retryCli = t.cli
+    let seed = [`attempt 1 (${clis.join(' + ')}): no competitor produced a passing implementation`]
     if (winner) {
       const verdict = await qa(t, winner)
-      if (verdict.approve) return { task: t.id, cli: clis.find(c => winner.worktree.endsWith(c)), impl: winner, attempts: 1, graft }
-      const retried = await attemptLoop(t, t.cli, 2, verdict.issues)   // retries 2-3 on primary
-      if (retried) return { ...retried, graft }
+      if (verdict.approve) return { task: t.id, cli: winner.cli, impl: winner, attempts: 1, graft }
+      retryCli = winner.cli
+      seed = verdict.issues
     }
+    const retried = await attemptLoop(t, retryCli, 2, seed, 1)   // attempts 2-3 on the winning CLI's worktree
+    if (!retried.exhausted) return { ...retried, graft }
+    log(`${t.id} (high risk): ${retryCli} exhausted, reassigning to ${args.alternates[retryCli]}`)
+    const fallback = await attemptLoop(t, args.alternates[retryCli], 2,
+      [...retried.feedback, `prior CLI (${retryCli}) failed all attempts on this task`], 3)   // attempts 4-5
+    return fallback.exhausted ? { task: t.id, failed: true } : { ...fallback, graft }
   }
   const primary = await attemptLoop(t, t.cli, 3, [])
-  if (primary) return primary
+  if (!primary.exhausted) return primary
   log(`${t.id}: ${t.cli} exhausted, reassigning to ${args.alternates[t.cli]}`)
-  const fallback = await attemptLoop(t, args.alternates[t.cli], 2, [`prior CLI (${t.cli}) failed all attempts on this task`])
-  return fallback ?? { task: t.id, failed: true }
+  const fallback = await attemptLoop(t, args.alternates[t.cli], 2,
+    [...primary.feedback, `prior CLI (${t.cli}) failed all attempts on this task`], 3)   // attempts 4-5
+  return fallback.exhausted ? { task: t.id, failed: true } : fallback
 }
 
 const results = (await pipeline(args.tasks, t => runTask(t))).filter(Boolean)
@@ -164,24 +184,24 @@ return {
 }
 ```
 
-Notes: high-risk tasks run attempt 1 as a two-CLI competition, then up to 2 feedback retries on the primary; routine tasks get 3 attempts on the primary then 2 on the alternate. All rejection feedback accumulates into the next attempt's prompt. Both branches return through the same shape; a task that exhausts every path comes back as `{task, failed: true}` — never silently dropped.
+Notes: the high-risk branch is terminal — attempt 1 is a two-CLI competition; the judged winner (or the primary, when no competitor passes attempt 1) gets 2 feedback retries (attempts 2–3) on its own CLI/worktree, then that CLI's alternate gets 2 attempts (4–5), then the task tombstones as `{task, failed: true}`. Routine tasks get 3 attempts on the primary, then 2 on the alternate (attempts 4–5), then the same tombstone. `attemptLoop` returns `{exhausted: true, feedback}` on exhaustion, so all rejection feedback — QA issues and failing-gate details — accumulates and is carried into the alternate CLI's prompts along with a reassignment note. Both branches return through the same shape; a task that exhausts every path comes back as `{task, failed: true}` — never silently dropped.
 
 ## Phase 3 — Merge (inline, orchestrator Claude, after the Workflow returns)
 
-Sequential, one approved result at a time:
+Require a clean working tree (`git status --porcelain` empty) before the first merge. Then sequential, one approved result at a time:
 
 ```bash
 cd <repo>
-git merge --squash <branch>           # or: git diff <merge-base> <branch> | git apply
+git merge --squash <branch>           # or: git diff <baseBranch> <branch> | git apply   (<baseBranch> = the Workflow's args.baseBranch)
 # run EVERY gate (build, typecheck, test, lint)
 git commit -m "feat: <task summary> (ultraswarm: <cli>)"
 git worktree remove --force <worktree> && git branch -D <branch>
 ```
 
-- A gate failure after merge stops the line: revert the squash (`git reset --hard HEAD` before commit / `git revert` after), re-enter the fail path for that task only, continue with the rest, and report it.
+- A gate failure after merge stops the line: revert the squash (`git reset --hard HEAD` before commit / `git revert` after), re-enter the fail path for that task only, continue with the rest, and report it. Re-enter = launch a one-task Workflow from the same template, seeded with the post-merge gate failure as feedback — or go straight to the Claude-implements last resort if budget is spent.
 - Conflicts: resolve by picking one source of truth (Rule 7 — never blend), and document the choice in the report.
 - Apply any `graft` ideas worth keeping as small Claude edits during merge, listed in the report.
-- Remove losing/unused competition worktrees and branches too.
+- Cleanup sweep — after the report: run `git worktree list` and `git branch --list 'ultraswarm/*'`, then remove every leftover `<reponame>-us-*` worktree and `ultraswarm/*` branch (losers and failed tasks included). Keep them until after the report so diffs stay inspectable.
 
 ## Phase 4 — Final verify & report
 
