@@ -10,11 +10,11 @@ Global precondition: every invocation string below assumes the current working d
 | CLI | Version | Status | Smoke test |
 |-----|---------|--------|------------|
 | codex | codex-cli 0.137.0 | enabled | PASS (2026-06-08, corrected flags — see codex entry and "E2E re-verification") |
-| gemini | 0.45.2 | enabled | not run (help-verified per docs/plans/2026-06-07-ultraswarm.md Task 1) |
+| gemini | 0.45.2 | enabled | PASS — verified end-to-end 2026-06-08 (formatCurrency task, 8/8, approved attempt 1, merged green) |
 | grok | 0.2.33 (c0ddec061) | enabled | PASS |
 | agy | 1.0.6 | enabled | PASS |
 | droid | 0.142.0 | enabled | help-verified — needs a Factory subscription; not smoke-tested here (no plan on the test machine) |
-| opencode | 1.16.2 | enabled | PASS (model corrected, see entry) |
+| opencode | 1.16.2 | enabled | PASS — verified end-to-end 2026-06-08 (clamp task, 8/8, approved attempt 1; model xai/grok-build-0.1 still valid) |
 
 ## codex (enabled — re-verified 2026-06-08 with corrected flags)
 
@@ -108,3 +108,10 @@ Global precondition: every invocation string below assumes the current working d
 - **codex — NOW VERIFIED end-to-end.** Invocation: `codex exec -s workspace-write --skip-git-repo-check "$(cat .ultraswarm-prompt.txt)" </dev/null`. Ran the backend math task through the full pipeline (worktree → code → gates → review → merge): 4/4 tests, approved attempt 1, merged green. Slow (~5 min/task); registry timeout raised to 15 min. Status: **enabled**.
 - **droid — enabled with `droid exec "<prompt>"` (help-verified, not smoke-tested here).** Login works (model Claude Opus 4.8 reachable via `droid --list-tools`), but on the test machine `droid exec` returned `{is_error:true, num_turns:0, output_tokens:0, result:"Exec failed"}` in <1 s — never reaching a model turn. This is consistent with **no active Factory subscription** (droid exec needs a paid plan to run a model), not a CLI defect. The correct invocation per Factory's help docs is `droid exec "$(cat .ultraswarm-prompt.txt)"`; on a subscribed machine Phase 0's write probe verifies it live before routing.
 - Second routine-tier pipeline run (codex + grok) was clean: both approved attempt 1, sequential squash-merge gated green after each, final 10/10 on main, worktrees swept.
+
+## v0.4 e2e (2026-06-08)
+
+- **High-risk competition path — VALIDATED live (first time).** A signed-token verifier (auth/security) ran codex vs grok through competition → judge panel → 3-lens adversarial verify → merge. 7 agents (2 impls + 2 judges + 3 lenses); grok won; passed 3-lens at attempt 1; merged green. No control-flow defects. Full write-up: `docs/notes/highrisk-e2e-2026-06-08.md`.
+- **gemini — VERIFIED end-to-end** (formatCurrency, 8/8, approved attempt 1, merged green).
+- **opencode — VERIFIED end-to-end** (clamp, 8/8, approved attempt 1; model `xai/grok-build-0.1` re-confirmed present via `opencode models`).
+- **Token reporting (observed, for the best-effort token metric):** only **codex** emits a parseable count (a `tokens used` line; ~21k on the high-risk task), and **droid** reports a `usage` JSON object in `-o json` mode (unverified — unsubscribed). **grok, gemini, opencode, agy report no parseable token usage** in default output → `cli_tokens` 0 for them. The report therefore shows a capture-coverage fraction (`captured/total`) and treats `external_tokens` as an undercount, not a precise figure.

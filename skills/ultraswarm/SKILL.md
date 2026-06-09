@@ -145,7 +145,7 @@ REVIEWER FEEDBACK FROM PREVIOUS ATTEMPT — fix every item:
 4. After it exits, run each gate inside the worktree and record pass/fail + a one-line detail:
    ${gateList}
 5. Housekeeping: rm ${wt(t,cli)}/.ultraswarm-prompt.txt, then cd ${wt(t,cli)} && git add -A && git commit -m "ultraswarm: ${t.id} attempt ${attempt}" (commit even if gates failed — the diff must be inspectable).
-6. Parse the CLI's self-reported token usage from its output into "cli_tokens" (total tokens — sum input+output if both are given). Patterns vary by CLI: codex prints "tokens used" then a number; droid/grok with JSON output have a "usage" object; others may print "<N> tokens". This is BEST-EFFORT — if the CLI printed no parseable usage, set cli_tokens to 0 (never fail the task over it). cli_tokens is EXTERNAL-CLI tokens, not Claude tokens.
+6. Parse the CLI's self-reported token usage from its output into "cli_tokens" (total tokens — sum input+output if both are given). Observed per-CLI reporting (2026-06-08 e2e): codex prints a "tokens used" line followed by a number → parse it; droid with -o json returns a usage object (input_tokens+output_tokens) → sum them; gemini, grok, opencode, and agy did NOT emit a parseable usage figure in their default output → expect 0 for these. This is BEST-EFFORT — if the CLI printed no parseable usage, set cli_tokens to 0 (never fail the task over it, and never guess a number). cli_tokens is EXTERNAL-CLI tokens, not Claude tokens.
 7. Return JSON per schema. status "ok" ONLY if the CLI completed AND every gate passed. Do not fix gate failures yourself — report them in gate_results detail and concerns. If the CLI errored immediately: "cli_failed". If you had to kill it: "timeout". List any files the CLI touched outside ${JSON.stringify(t.files)} in concerns. "worktree" must be the absolute path ${wt(t,cli)} — never ~-relative.`
 
 const reviewPrompt = (t, impl) => `Review external-CLI work. cd ${impl.worktree} && git diff ${cfg.baseBranch}...${impl.branch}. Task: ${t.description}. Acceptance: ${t.acceptance}.
@@ -159,10 +159,17 @@ const LENSES = ['correctness (logic errors, unmet acceptance criteria, broken ed
   'security (hardcoded secrets, unvalidated input, injection, authz gaps, leaky errors)',
   'regression (does existing behavior still work — run the existing test suite)']
 
-let externalTokens = 0   // best-effort sum of external-CLI tokens across ALL attempts (incl. failed)
+let externalTokens = 0      // best-effort sum of external-CLI tokens across ALL attempts (incl. failed)
+let tokenAttempts = 0       // attempts where a CLI actually ran (an impl came back)
+let tokenCaptured = 0       // of those, how many reported a parseable token count (>0)
 async function implement(t, cli, attempt, feedback) {
   const r = await agent(implPrompt(t, cli, attempt, feedback), { label:`impl:${t.id}:${cli}#${attempt}`, phase:'Implement', schema: IMPL_SCHEMA })
-  externalTokens += (r && typeof r.cli_tokens === 'number') ? r.cli_tokens : 0
+  if (r) {
+    tokenAttempts += 1
+    const n = typeof r.cli_tokens === 'number' ? r.cli_tokens : 0
+    externalTokens += n
+    if (n > 0) tokenCaptured += 1
+  }
   return r
 }
 async function qa(t, impl) {
@@ -245,6 +252,7 @@ return {
   approved: results.filter(r => !r.failed),
   failed: results.filter(r => r.failed).map(r => r.task),
   external_tokens: externalTokens,   // best-effort total external-CLI tokens (the coding offloaded from Claude)
+  token_coverage: { captured: tokenCaptured, total: tokenAttempts },   // how many CLI runs reported a parseable count
 }
 ```
 
@@ -273,16 +281,16 @@ git worktree remove --force <worktree> && git branch -D <branch>
 2. Report table: task · CLI used · attempts · QA verdict · files. Then, loudly: tasks that failed entirely, tasks Claude had to implement directly (last-resort fail path), conflicts resolved and how, grafts applied, CLIs dropped at health check. Never report done unless the final gate passed.
 3. **Token accounting** — add this block using two MEASURED numbers and one clearly-labelled estimate. Do NOT invent precision.
    - **Claude (orchestration + QA):** the Workflow run's reported subagent token total (shown in its completion notification as `subagent_tokens`). This is what the run cost *you* in Claude — the wrapper, review, judge, and verify agents. (Phase 0/3/4 inline work adds a little more; note it as "+ inline orchestration" rather than guessing a number.)
-   - **External CLIs (coding):** `external_tokens` from the Workflow return — the coding work that ran on the external providers' tokens, not Claude's. Best-effort: it sums only what each CLI self-reported, so the true figure may be higher; say so.
+   - **External CLIs (coding):** `external_tokens` from the Workflow return — the coding work that ran on the external providers' tokens, not Claude's. Show capture coverage from `token_coverage` (`captured`/`total`) so the partiality is concrete, not a hand-wave. **Most CLIs don't report tokens** (as of 2026-06-08 only codex, and droid in JSON mode, emit a parseable count — grok/gemini/opencode/agy report 0), so coverage is typically low and `external_tokens` undercounts; say so plainly.
    - **Est. Claude work offloaded:** report the external-CLI total as a **proxy estimate** for the coding Claude did not have to do, with this caveat verbatim or close: *"proxy estimate — the bulk coding ran on external CLIs; a Claude-native build would consume a different number of Claude tokens."* Never present it as an exact measured "Claude tokens saved".
-   - Suggested format:
+   - Suggested format (substitute the real `token_coverage`):
      ```
      Token accounting (this run, best-effort)
        Claude — orchestration + QA:   ~<subagent_tokens> tokens (+ inline orchestration)
-       External CLIs — coding:        ~<external_tokens> tokens  (offloaded; provider tokens, not Claude)
+       External CLIs — coding:        ~<external_tokens> tokens  (captured <captured>/<total> CLI runs; rest don't report — true total is higher)
        Est. Claude work offloaded:    ~<external_tokens>         † proxy estimate, not a measured Claude-token figure
      ```
-   - If `external_tokens` is 0 or only some CLIs reported, state that token capture was partial/unavailable rather than implying zero offload.
+   - If `token_coverage.captured` is 0, state that no CLI reported token usage this run (so external coding volume is unmeasured) rather than implying zero offload.
 
 ## Failure handling
 
