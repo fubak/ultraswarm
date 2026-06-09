@@ -40,7 +40,7 @@ if [ ! -f "$PLUGIN_JSON" ]; then
   pass "plugin.json absent — component-key conflict not possible"
 # First require a non-empty plugins array — otherwise `.plugins[0]` is null and
 # the `has(...)` probe errors out (swallowed -> misleading PASS).
-elif ! jq -e '(.plugins | type == "array") and (length > 0)' \
+elif ! jq -e '.plugins | (type == "array") and (length > 0)' \
     "$MARKET_JSON" >/dev/null 2>&1; then
   fail "marketplace.json has no non-empty plugins array"
 elif jq -e '.plugins[0] | has("skills") or has("commands") or has("agents")' \
