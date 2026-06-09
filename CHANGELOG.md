@@ -4,9 +4,31 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.4.0] — 2026-06-08
 
-_v0.4 in progress — see `docs/plans/2026-06-08-ultraswarm-v0.4.md`._
+A validation + hardening + hygiene release — almost no new surface, but the
+existing feature set is now proven.
+
+### Added
+- **Token capture-coverage.** The Phase 4 token-accounting block now shows a
+  `captured/total` fraction (from a new `token_coverage` return field) and
+  treats the external-token figure as an undercount — only codex (and droid in
+  JSON mode) emit a parseable count; grok/gemini/opencode/agy report none.
+- **CI + release validator.** `scripts/validate.sh` checks both manifests, the
+  no-component-conflict invariant, version agreement, the embedded Workflow JS
+  (parse + no resume-breaking tokens), and the example config; a GitHub Actions
+  workflow runs it on every push/PR. A `CHANGELOG.md` (this file).
+
+### Verified
+- **High-risk competition path validated live** (first time): a security-sensitive
+  signed-token task ran codex vs grok through competition → judge panel → 3-lens
+  adversarial verify → merge, with no control-flow defects
+  (`docs/notes/highrisk-e2e-2026-06-08.md`).
+- **gemini** and **opencode** verified end-to-end (previously probe-only).
+- Per-CLI token-reporting behavior documented from real runs.
+
+### Changed
+- Bumped the plugin version to 0.4.0 across both manifests.
 
 ## [0.3.0] — 2026-06-08
 
@@ -55,7 +77,7 @@ _v0.4 in progress — see `docs/plans/2026-06-08-ultraswarm-v0.4.md`._
 - Packaged as a single-plugin marketplace (`.claude-plugin/`), MIT licensed,
   with README, design spec, implementation plan, and CLI verification registry.
 
-[Unreleased]: https://github.com/fubak/ultraswarm/compare/v0.3...HEAD
+[0.4.0]: https://github.com/fubak/ultraswarm/releases/tag/v0.4
 [0.3.0]: https://github.com/fubak/ultraswarm/releases/tag/v0.3
 [0.2.0]: https://github.com/fubak/ultraswarm/releases/tag/v0.2
 [0.1.0]: https://github.com/fubak/ultraswarm/releases/tag/v0.1
