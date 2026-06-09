@@ -355,11 +355,11 @@ git branch --list 'ultraswarm/*' | xargs -r git branch -D
 
 Honest current state (verified 2026-06-07, re-verified 2026-06-08):
 
-- **Verified end-to-end:** the routine-tier pipeline (decompose → worktree → CLI codes → gates → review → sequential merge → final verify) using **codex**, **grok**, and **agy**. Each implemented its task correctly on the first attempt; merges gated clean; cleanup verified.
+- **Verified end-to-end:** the routine-tier pipeline (decompose → worktree → CLI codes → gates → review → sequential merge → final verify) using **codex**, **grok**, **agy**, **gemini**, and **opencode**. Each implemented its task correctly on the first attempt; merges gated clean; cleanup verified.
   - **codex** needs specific flags — `codex exec -s workspace-write --skip-git-repo-check '<prompt>' </dev/null` — because its default sandbox rejects worktree writes and bare `exec` hangs on stdin. It's also **slow (~5 min/task)**, so it runs with a 15-min timeout. The registry encodes all of this.
-- **Verified by health/write probe, not yet exercised in a full run:** **gemini**, **opencode**.
+- **The high-risk competition path** (competition → judge panel → 3-lens adversarial verify) is **validated live** (2026-06-08): a security-sensitive signed-token task ran codex vs grok through all stages — judge picked the winner, 3 lenses passed, merged green, no defects. Write-up in `docs/notes/highrisk-e2e-2026-06-08.md`.
 - **Enabled but not smoke-tested here:** **droid** — uses `droid exec "<prompt>"` and requires an active Factory subscription. The test machine had no plan, so `droid exec` returned 0 turns / 0 tokens (consistent with no model access, not a CLI defect). On a subscribed machine, Phase 0's write probe verifies it before routing.
-- **The high-risk competition path** (judge panel + 3-lens adversarial verify) is review-verified but has **not** been exercised in a live run — the smoke tests only used routine-tier tasks. The first real high-risk task is its live test.
+- **Token capture is partial.** The per-run token metric is best-effort: as of 2026-06-08 only **codex** (and droid in JSON mode) emit a parseable token count — grok/gemini/opencode/agy report none. The report shows a `captured/total` coverage fraction and treats the external-token figure as an undercount, never a precise "tokens saved."
 - **Local only** — no remote/CI execution. Everything runs in local worktrees.
 
 CLI availability and flags drift over time. The skill re-checks health and write capability at the start of *every* run, so a CLI that breaks (or gets fixed) is picked up automatically — the table above is a snapshot, not a hard dependency.

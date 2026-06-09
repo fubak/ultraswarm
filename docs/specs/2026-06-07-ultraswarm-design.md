@@ -66,6 +66,7 @@ Maintained as a table inside the skill. Each entry: invocation command, auto-app
 
 - **Amendment (2026-06-07):** registry expanded to six workers — droid and opencode added by user request 2026-06-07. All invocations verified and recorded in `docs/notes/cli-verification.md` (source of truth, including quirks).
 - **Amendment (2026-06-08):** all six workers enabled. droid uses `droid exec "<prompt>"` and requires a Factory subscription (help-verified; could not be smoke-tested without a plan). Per-machine CLI availability is resolved at runtime by Phase 0's health check + write probe.
+- **Amendment (v0.4, 2026-06-08):** the high-risk competition path (competition → judge panel → 3-lens adversarial verify) was validated live with no defects (see `docs/notes/highrisk-e2e-2026-06-08.md`); gemini and opencode verified end-to-end. Token capture is best-effort and partial (only codex/droid report) — the report now shows a capture-coverage fraction. A `scripts/validate.sh` + GitHub Actions CI now parse-checks the manifests and embedded Workflow JS on every push.
 - **Health check:** Phase 0 runs `<cli> --version` for every registered CLI. A missing or broken CLI is dropped from routing and reported loudly — never silently skipped.
 - **Timeouts:** per-CLI timeout (default 10 min, configurable per task in the registry). On timeout: kill, count as a failed attempt, enter the fail path.
 
