@@ -371,15 +371,18 @@ CLI availability and flags drift over time. The skill re-checks health and write
 ```
 ultraswarm/
 ├── README.md                                   ← you are here
+├── CHANGELOG.md                                ← release history
 ├── LICENSE                                      ← MIT
 ├── ultraswarm.config.example.json              ← starter CLI-selection config
+├── scripts/validate.sh                         ← release validator (run by CI)
+├── .github/workflows/validate.yml              ← CI: validates manifests + Workflow JS on push
 ├── .claude-plugin/
 │   ├── plugin.json                             ← plugin manifest
 │   └── marketplace.json                        ← single-plugin marketplace listing
 ├── skills/ultraswarm/SKILL.md                  ← the skill (canonical source)
 └── docs/
     ├── specs/2026-06-07-ultraswarm-design.md   ← approved design spec
-    ├── plans/2026-06-07-ultraswarm.md          ← implementation plan (historical)
+    ├── plans/                                  ← implementation plans (historical)
     └── notes/cli-verification.md               ← verified CLI invocations, quirks, e2e findings
 ```
 
