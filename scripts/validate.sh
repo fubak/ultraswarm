@@ -36,26 +36,54 @@ fi
 # The marketplace plugin entry must NOT declare component keys (skills/commands/
 # agents) while plugin.json exists — that combination caused a v0.3 load error.
 echo "[2] No manifest conflict (marketplace plugin entry vs plugin.json)"
-if [ -f "$PLUGIN_JSON" ]; then
-  if jq -e '.plugins[0] | has("skills") or has("commands") or has("agents")' \
-      "$MARKET_JSON" >/dev/null 2>&1; then
-    fail "marketplace.json plugins[0] declares skills/commands/agents while plugin.json exists"
-  else
-    pass "marketplace.json plugins[0] declares no component keys"
-  fi
-else
+if [ ! -f "$PLUGIN_JSON" ]; then
   pass "plugin.json absent — component-key conflict not possible"
+# First require a non-empty plugins array — otherwise `.plugins[0]` is null and
+# the `has(...)` probe errors out (swallowed -> misleading PASS).
+elif ! jq -e '(.plugins | type == "array") and (length > 0)' \
+    "$MARKET_JSON" >/dev/null 2>&1; then
+  fail "marketplace.json has no non-empty plugins array"
+elif jq -e '.plugins[0] | has("skills") or has("commands") or has("agents")' \
+    "$MARKET_JSON" >/dev/null 2>&1; then
+  fail "marketplace.json plugins[0] declares skills/commands/agents while plugin.json exists"
+else
+  pass "marketplace.json plugins[0] declares no component keys"
 fi
 
 # --- Check 3: Versions agree --------------------------------------------------
+# Read each version via a guarded helper so a missing file or a missing/null key
+# becomes a reported Check-3 FAIL rather than aborting the script under `set -e`.
+# `jq -r` on an absent key prints literal "null" with rc 0, so we must also
+# reject "null"/empty explicitly — otherwise three absent versions would all
+# equal "null" and false-pass as a match.
 echo "[3] Versions agree"
-v_plugin="$(jq -r '.version' "$PLUGIN_JSON")"
-v_meta="$(jq -r '.metadata.version' "$MARKET_JSON")"
-v_entry="$(jq -r '.plugins[0].version' "$MARKET_JSON")"
-echo "      plugin.json .version            = $v_plugin"
-echo "      marketplace.json .metadata.version   = $v_meta"
-echo "      marketplace.json .plugins[0].version = $v_entry"
-if [ "$v_plugin" = "$v_meta" ] && [ "$v_meta" = "$v_entry" ]; then
+read_version() { # <file> <jq-filter>
+  if [ ! -f "$1" ]; then
+    echo "<missing-file>"
+    return
+  fi
+  local v
+  if ! v="$(jq -r "$2" "$1" 2>/dev/null)"; then
+    echo "<jq-error>"
+    return
+  fi
+  echo "$v"
+}
+v_plugin="$(read_version "$PLUGIN_JSON" '.version')"
+v_meta="$(read_version "$MARKET_JSON" '.metadata.version')"
+v_entry="$(read_version "$MARKET_JSON" '.plugins[0].version')"
+echo "      plugin.json .version                  = $v_plugin"
+echo "      marketplace.json .metadata.version    = $v_meta"
+echo "      marketplace.json .plugins[0].version  = $v_entry"
+v3_bad=""
+for v in "$v_plugin" "$v_meta" "$v_entry"; do
+  case "$v" in
+    "" | "null" | "<missing-file>" | "<jq-error>") v3_bad="yes" ;;
+  esac
+done
+if [ -n "$v3_bad" ]; then
+  fail "one or more versions are absent/null/unreadable"
+elif [ "$v_plugin" = "$v_meta" ] && [ "$v_meta" = "$v_entry" ]; then
   pass "all three versions match ($v_plugin)"
 else
   fail "version mismatch across manifests"
@@ -63,8 +91,12 @@ fi
 
 # --- Check 4: Embedded Workflow JS parses -------------------------------------
 echo "[4] Embedded Workflow JS parses"
+# `mktemp --suffix=` is a GNU coreutils extension (present on the Ubuntu CI
+# runner). The script also advertises local use; on BSD/macOS mktemp this flag
+# would need adjusting.
 TMP_JS="$(mktemp --suffix=.js)"
-trap 'rm -f "$TMP_JS"' EXIT
+TMP_ERR="$(mktemp)"
+trap 'rm -f "$TMP_JS" "$TMP_ERR"' EXIT
 
 # Extract the fenced block between a full-line ```js and the next full-line ```.
 # Anchor on full lines so ```json does not match.
@@ -77,15 +109,21 @@ awk '
 if [ ! -s "$TMP_JS" ]; then
   fail "could not extract a non-empty \`\`\`js block from SKILL.md"
 else
-  # Strip the leading `export const meta = { ... }` object literal (terminated by
-  # the first line that is exactly `}` at column 0), then validate the remaining
-  # script body parses as an async function body.
-  if node -e "const src=require('fs').readFileSync('$TMP_JS','utf8').replace(/^export const meta[\s\S]*?\n}\n/,''); new Function('args','agent','parallel','pipeline','log','budget','return (async()=>{'+src+'})()');" 2>/tmp/.us_node_err; then
+  # Strip the leading `export const meta = { ... }` object literal, then validate
+  # the remaining script body parses as an async function body.
+  #
+  # META-BLOCK CONTRACT (required for the strip regex below to be correct):
+  #   - `export const meta = {` MUST be the first line of the ```js block.
+  #   - The object's closing brace MUST be a line that is exactly `}` at
+  #     column 0 (no trailing comment, no indentation) — it terminates the strip.
+  #   - No inner property may place a `}` alone at column 0 (would truncate early).
+  #   - Line endings MUST be LF (the `\n}\n` anchor assumes Unix newlines; CRLF
+  #     would leave a stray `\r` and break the match).
+  if node -e "const src=require('fs').readFileSync('$TMP_JS','utf8').replace(/^export const meta[\s\S]*?\n}\n/,''); new Function('args','agent','parallel','pipeline','log','budget','return (async()=>{'+src+'})()');" 2>"$TMP_ERR"; then
     pass "Workflow JS body parses as an async function body"
   else
-    fail "Workflow JS body failed to parse: $(cat /tmp/.us_node_err 2>/dev/null | head -1)"
+    fail "Workflow JS body failed to parse: $(head -1 "$TMP_ERR" 2>/dev/null)"
   fi
-  rm -f /tmp/.us_node_err
 fi
 
 # --- Check 5: No resume-breaking tokens in the JS block -----------------------
