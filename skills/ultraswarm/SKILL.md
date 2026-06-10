@@ -25,23 +25,25 @@ The registry now supports **intelligent model selection** per task complexity. E
 
 ### Base CLI Configurations
 
-| CLI | Base Invocation | Primary Specialty | Models Available | Timeout |
+| CLI | Base Invocation | Primary Specialty | Models Available (verified 2026-06-10) | Timeout |
 |---|---|---|---|---|
-| **codex** | Dynamic model selection (see complexity table) | Backend, algorithms, debugging, architecture | gpt-4o-mini → gpt-5.5-turbo | 5-20 min |
-| **opencode** | Multi-model with agent selection | Boilerplate, testing, docs, simple features | grok-build-0.1 → claude-sonnet-4 | 5-15 min |
-| **gemini** | Google model ecosystem | Frontend, UI, components, design | gemini-2-flash → gemini-2-ultra | 5-15 min |
-| **grok** | xAI model family | Tests, refactors, general coding | grok-4 → grok-5-ultra | 5-15 min |
-| **agy** | Google Antigravity models | Documentation, boilerplate, automation | gemini-2-flash → gemini-2-ultra | 10-20 min |
-| **droid** | Factory AI ecosystem | Full-stack, refactoring, complex logic | claude-haiku → claude-opus-pro | 10-20 min |
+| **codex** | Dynamic model selection (see complexity table) | Backend, algorithms, debugging, architecture | gpt-5.4-mini → gpt-5.5 | 5-20 min |
+| **opencode** | Multi-model with agent selection | Boilerplate, testing, docs, simple features | xai/grok-build-0.1 → xai/grok-4.20-reasoning (run `opencode models` for the full list) | 5-15 min |
+| **gemini** | Google model ecosystem | Frontend, UI, components, design | gemini-2.5-flash → gemini-2.5-pro | 5-15 min |
+| **grok** | xAI model family | Tests, refactors, general coding | grok-build → grok-composer-2.5-fast (run `grok models`) | 5-15 min |
+| **agy** | Google Antigravity models | Documentation, boilerplate, automation | gemini-2.5-flash → gemini-2.5-pro (via `--model`) | 10-20 min |
+| **droid** | Factory AI ecosystem | Full-stack, refactoring, complex logic | claude-haiku-4-5 → claude-opus-4-8 (default: claude-opus-4-8) | 10-20 min |
 
 ### Dynamic Model Selection by Complexity
 
+Tier→model mappings come from the config (`overrides.<cli>.models.<tier>`); the rows below are the verified defaults shipped in `ultraswarm.config.advanced.json`. **Model IDs drift** — Phase 0 must re-verify each configured model (e.g. `opencode models`, `grok models`, codex's `~/.codex/models_cache.json`) and drop tiers whose model is rejected, because an invalid model name does NOT fail fast (codex hangs until the wrapper timeout).
+
 | Complexity | Score Range | codex Models | opencode Models | gemini Models | Timeout Multiplier |
 |---|---|---|---|---|---|
-| **Simple** | 1-20 | gpt-4o-mini | grok-build-0.1 | gemini-2-flash | 1.0x |
-| **Moderate** | 21-50 | gpt-4o | grok-4.3 | gemini-2-pro | 1.5x |
-| **Complex** | 51-100 | gpt-5.5 | gpt-4o | gemini-2-ultra | 2.0x |
-| **Expert** | 101+ | gpt-5.5-turbo | claude-sonnet-4 | gemini-2-ultra | 3.0x |
+| **Simple** | 1-20 | gpt-5.4-mini | xai/grok-build-0.1 | gemini-2.5-flash | 1.0x |
+| **Moderate** | 21-50 | gpt-5.4 | xai/grok-4.3 | gemini-2.5-pro | 1.5x |
+| **Complex** | 51-100 | gpt-5.5 | google/gemini-3.1-pro-preview | gemini-2.5-pro | 2.0x |
+| **Expert** | 101+ | gpt-5.5 (reasoning_effort=high) | xai/grok-4.20-0309-reasoning | gemini-2.5-pro | 3.0x |
 
 ### Registry Intelligence Features
 
@@ -95,10 +97,10 @@ Two locations, **project overrides global**:
   "overrides": {
     "codex": {
       "models": {
-        "simple": { "model": "gpt-4o-mini", "invocation": "codex exec -s workspace-write --skip-git-repo-check -m gpt-4o-mini \"$(cat .ultraswarm-prompt.txt)\" </dev/null" },
-        "moderate": { "model": "gpt-4o", "invocation": "..." },
+        "simple": { "model": "gpt-5.4-mini", "invocation": "codex exec -s workspace-write --skip-git-repo-check -m gpt-5.4-mini \"$(cat .ultraswarm-prompt.txt)\" </dev/null" },
+        "moderate": { "model": "gpt-5.4", "invocation": "..." },
         "complex": { "model": "gpt-5.5", "invocation": "..." },
-        "expert": { "model": "gpt-5.5-turbo", "invocation": "..." }
+        "expert": { "model": "gpt-5.5", "invocation": "..." }
       }
     }
   },
@@ -155,7 +157,7 @@ Advanced interactive configuration builder supporting intelligence features and 
 2. **Enhanced Status Table**:
    ```
    CLI      | Installed | Models Available              | Auth Status | Current Config
-   codex    | ✅ v2.1   | gpt-4o-mini, gpt-4o, gpt-5.5  | ✅ API key  | enabled
+   codex    | ✅ v2.1   | gpt-5.4-mini, gpt-5.4, gpt-5.5  | ✅ API key  | enabled
    opencode | ✅ v1.3   | 12 models across 4 providers  | ✅ keys     | disabled
    gemini   | ❌        | —                             | —           | —
    ```
@@ -180,7 +182,7 @@ Advanced interactive configuration builder supporting intelligence features and 
    opencode model selection:
    Simple tasks    → xai/grok-build-0.1     (fast, cheap)
    Moderate tasks  → xai/grok-4.3           (balanced)
-   Complex tasks   → openai/gpt-4o          (powerful)
+   Complex tasks   → google/gemini-3.1-pro-preview (powerful)
    Expert tasks    → anthropic/claude-sonnet (expert reasoning)
    ```
 
@@ -330,10 +332,10 @@ const cfg = typeof args === 'string' ? JSON.parse(args) : args
 //   // Enhanced registry with multi-model support
 //   registry: { 
 //     codex: { 
-//       simple: 'codex exec -s workspace-write --skip-git-repo-check -m gpt-4o-mini "$(cat .ultraswarm-prompt.txt)" </dev/null',
-//       moderate: 'codex exec -s workspace-write --skip-git-repo-check -m gpt-4o "$(cat .ultraswarm-prompt.txt)" </dev/null',
+//       simple: 'codex exec -s workspace-write --skip-git-repo-check -m gpt-5.4-mini "$(cat .ultraswarm-prompt.txt)" </dev/null',
+//       moderate: 'codex exec -s workspace-write --skip-git-repo-check -m gpt-5.4 "$(cat .ultraswarm-prompt.txt)" </dev/null',
 //       complex: 'codex exec -s workspace-write --skip-git-repo-check -m gpt-5.5 "$(cat .ultraswarm-prompt.txt)" </dev/null',
-//       expert: 'codex exec -s workspace-write --skip-git-repo-check -m gpt-5.5-turbo "$(cat .ultraswarm-prompt.txt)" </dev/null'
+//       expert: 'codex exec -s workspace-write --skip-git-repo-check -m gpt-5.5 "$(cat .ultraswarm-prompt.txt)" </dev/null'
 //     }, ... 
 //   },
 //   
@@ -1049,8 +1051,8 @@ git commit -m "feat: <task_summary> (ultraswarm: <cli>/<model_tier>, complexity:
    **Task Execution Overview:**
    | Task ID | Description | CLI/Model | Complexity | Attempts | Status | Files |
    |---------|-------------|-----------|------------|----------|--------|-------|
-   | t1 | Feature X | codex/gpt-4o | 35/100 | 1 | ✅ | src/feature.js, test/feature.test.js |
-   | t2 | UI Component | gemini/gemini-2-pro | 28/100 | 2 | ✅ | src/ui/component.tsx |
+   | t1 | Feature X | codex/gpt-5.4 | 35/100 | 1 | ✅ | src/feature.js, test/feature.test.js |
+   | t2 | UI Component | gemini/gemini-2.5-pro | 28/100 | 2 | ✅ | src/ui/component.tsx |
    
    **Intelligence Metrics:**
    - **Complexity Efficiency**: 94% (achieved 847/planned 900 complexity points)
@@ -1059,10 +1061,10 @@ git commit -m "feat: <task_summary> (ultraswarm: <cli>/<model_tier>, complexity:
    - **Task Granularity**: Average 23/100 complexity per task (target: ≤15)
    
    **Model Usage Distribution:**
-   - gpt-4o-mini: 3 tasks (simple boilerplate)
-   - gpt-4o: 2 tasks (moderate logic)  
-   - gemini-2-pro: 2 tasks (UI components)
-   - claude-sonnet-4: 1 task (complex architecture)
+   - gpt-5.4-mini: 3 tasks (simple boilerplate)
+   - gpt-5.4: 2 tasks (moderate logic)  
+   - gemini-2.5-pro: 2 tasks (UI components)
+   - xai/grok-4.20-reasoning: 1 task (complex architecture)
 
 3. **Enhanced token accounting** with intelligence breakdown:
    ```
