@@ -4,6 +4,62 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [2.0.0] — 2026-06-09
+
+A major intelligence upgrade transforming ultraswarm into an advanced AI orchestration platform with sophisticated prompt analysis, dynamic model routing, and ultra-granular task decomposition.
+
+### Added - Intelligence Core
+- **Phase 0a — Intelligent Prompt Analysis**: Automatic complexity assessment (5-dimensional scoring), model requirement analysis, and intelligent routing strategy generation
+- **Dynamic Model Selection**: Multi-tier model routing per CLI based on task complexity (simple → moderate → complex → expert)
+- **Ultra-Granular Task Decomposition**: Break work into atomic tasks with complexity ≤15/100, aggressive parallelization, and minimal dependencies
+- **Adaptive Quality Assurance**: QA depth scales with complexity (Haiku for simple → Sonnet for moderate → Opus for expert-level tasks)
+- **Claude Model Optimization**: Intelligent Claude model selection per orchestration phase (Haiku for cost-efficient operations, Sonnet for analysis, Opus for critical decisions)
+
+### Added - Advanced Configuration
+- **Enhanced Configuration Schema**: Support for intelligence settings, multi-model CLI overrides, task strategies, and complexity thresholds
+- **Multi-Model CLI Support**: Full model selection capabilities for CLIs supporting multiple models (OpenCode, Codex, Gemini, etc.)
+- **Intelligent Configuration Builder**: Interactive multi-stage configuration with model probing, auth verification, and complexity tier mapping
+- **Advanced Configuration Example**: Complete `ultraswarm.config.advanced.json` template demonstrating all new capabilities
+
+### Added - Enhanced Execution
+- **Dependency-Aware Coordination**: Task graph analysis with independent cluster processing and critical path optimization  
+- **Model Escalation**: Automatic model tier escalation on retry attempts for improved success rates
+- **Competition Intelligence**: Multi-dimensional scoring for high-risk task competitions (correctness + model efficiency + complexity handling)
+- **Performance Tracking**: Execution time monitoring, complexity achievement scoring, and model efficiency metrics
+
+### Added - Intelligence Reporting
+- **Comprehensive Intelligence Metrics**: Complexity efficiency, model usage distribution, parallelization effectiveness, task granularity analysis
+- **Enhanced Token Accounting**: Phase-wise Claude token breakdown and model tier distribution for external CLI usage
+- **Quality Insights**: Grafted improvements tracking, configuration optimization recommendations, performance analysis
+- **Intelligence Efficiency Reporting**: Quantified gains from intelligent model routing vs uniform high-tier model usage
+
+### Enhanced
+- **CLI Registry**: Transformed to support complexity-based model selection with timeout scaling and capability matching
+- **Workflow Script**: Completely rewritten with intelligent routing, enhanced schemas, and adaptive execution logic
+- **QA System**: Multi-tier review process with confidence scoring, severity assessment, and expert escalation
+- **Merge Process**: Dependency-aware merge sequencing with conflict prediction and resolution intelligence
+- **Error Handling**: Enhanced failure analysis with complexity reassessment and model tier adjustment
+
+### Configuration
+- **New Configuration Options**: 
+  - `intelligence.promptAnalysis` — Enable complexity assessment and model routing
+  - `intelligence.modelRouting.claudeModels` — Claude model selection per orchestration phase
+  - `overrides.<cli>.models.<complexity>` — Per-CLI model configuration by complexity tier
+  - `taskStrategies.decomposition` — Ultra-granular task breakdown configuration
+  - `taskStrategies.quality` — Adaptive QA strategy settings
+
+### Breaking Changes
+- Configuration schema significantly extended (backward compatible with legacy configs)
+- Workflow script completely rewritten (new intelligence capabilities require updated orchestration)
+- Task structure enhanced with complexity scoring and model tier assignments
+- QA schema expanded with intelligence metrics and confidence scoring
+
+### Backward Compatibility
+- Legacy single-model CLI configurations still supported
+- Basic mode available for users preferring original behavior
+- Existing configurations automatically upgraded with sensible defaults
+- All original CLI invocations preserved as "simple" tier defaults
+
 ## [0.4.0] — 2026-06-08
 
 A validation + hardening + hygiene release — almost no new surface, but the

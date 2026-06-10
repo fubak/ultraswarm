@@ -1,0 +1,171 @@
+{
+  "enabled": ["codex", "gemini", "grok", "agy", "droid", "opencode"],
+  "intelligence": {
+    "promptAnalysis": {
+      "enabled": true,
+      "complexityThresholds": {
+        "simple": 20,
+        "moderate": 50,
+        "complex": 100,
+        "expert": 200
+      },
+      "taskGranularity": "ultra-fine",
+      "maxTaskComplexity": 15
+    },
+    "modelRouting": {
+      "enabled": true,
+      "claudeModels": {
+        "promptAnalysis": "sonnet",
+        "decomposition": "sonnet",
+        "orchestration": "haiku",
+        "codeReview": "sonnet",
+        "highRiskQA": "opus",
+        "finalReport": "haiku"
+      }
+    }
+  },
+  "overrides": {
+    "codex": {
+      "timeoutMs": 900000,
+      "models": {
+        "simple": {
+          "model": "gpt-4o-mini",
+          "invocation": "codex exec -s workspace-write --skip-git-repo-check -m gpt-4o-mini \"$(cat .ultraswarm-prompt.txt)\" </dev/null"
+        },
+        "moderate": {
+          "model": "gpt-4o",
+          "invocation": "codex exec -s workspace-write --skip-git-repo-check -m gpt-4o \"$(cat .ultraswarm-prompt.txt)\" </dev/null"
+        },
+        "complex": {
+          "model": "gpt-5.5",
+          "invocation": "codex exec -s workspace-write --skip-git-repo-check -m gpt-5.5 \"$(cat .ultraswarm-prompt.txt)\" </dev/null"
+        },
+        "expert": {
+          "model": "gpt-5.5-turbo",
+          "invocation": "codex exec -s workspace-write --skip-git-repo-check -m gpt-5.5-turbo \"$(cat .ultraswarm-prompt.txt)\" </dev/null"
+        }
+      }
+    },
+    "opencode": {
+      "models": {
+        "simple": {
+          "model": "xai/grok-build-0.1",
+          "invocation": "opencode run --agent build -m \"xai/grok-build-0.1\" \"$(cat .ultraswarm-prompt.txt)\""
+        },
+        "moderate": {
+          "model": "xai/grok-4.3",
+          "invocation": "opencode run --agent build -m \"xai/grok-4.3\" \"$(cat .ultraswarm-prompt.txt)\""
+        },
+        "complex": {
+          "model": "openai/gpt-4o",
+          "invocation": "opencode run --agent dev -m \"openai/gpt-4o\" \"$(cat .ultraswarm-prompt.txt)\""
+        },
+        "expert": {
+          "model": "anthropic/claude-sonnet-4",
+          "invocation": "opencode run --agent architect -m \"anthropic/claude-sonnet-4\" \"$(cat .ultraswarm-prompt.txt)\""
+        }
+      }
+    },
+    "gemini": {
+      "models": {
+        "simple": {
+          "model": "gemini-2-flash",
+          "invocation": "gemini --yolo -m gemini-2-flash -p \"$(cat .ultraswarm-prompt.txt)\""
+        },
+        "moderate": {
+          "model": "gemini-2-pro",
+          "invocation": "gemini --yolo -m gemini-2-pro -p \"$(cat .ultraswarm-prompt.txt)\""
+        },
+        "complex": {
+          "model": "gemini-2-ultra",
+          "invocation": "gemini --yolo -m gemini-2-ultra -p \"$(cat .ultraswarm-prompt.txt)\""
+        },
+        "expert": {
+          "model": "gemini-2-ultra",
+          "invocation": "gemini --yolo -m gemini-2-ultra -p \"$(cat .ultraswarm-prompt.txt)\""
+        }
+      }
+    },
+    "grok": {
+      "models": {
+        "simple": {
+          "model": "grok-4",
+          "invocation": "grok --always-approve -m grok-4 -p \"$(cat .ultraswarm-prompt.txt)\""
+        },
+        "moderate": {
+          "model": "grok-4.3",
+          "invocation": "grok --always-approve -m grok-4.3 -p \"$(cat .ultraswarm-prompt.txt)\""
+        },
+        "complex": {
+          "model": "grok-5",
+          "invocation": "grok --always-approve -m grok-5 -p \"$(cat .ultraswarm-prompt.txt)\""
+        },
+        "expert": {
+          "model": "grok-5-ultra",
+          "invocation": "grok --always-approve -m grok-5-ultra -p \"$(cat .ultraswarm-prompt.txt)\""
+        }
+      }
+    },
+    "agy": {
+      "models": {
+        "simple": {
+          "model": "gemini-2-flash",
+          "invocation": "agy --print-timeout 15m -m gemini-2-flash --prompt \"$(cat .ultraswarm-prompt.txt)\""
+        },
+        "moderate": {
+          "model": "gemini-2-pro",
+          "invocation": "agy --print-timeout 15m -m gemini-2-pro --prompt \"$(cat .ultraswarm-prompt.txt)\""
+        },
+        "complex": {
+          "model": "gemini-2-ultra",
+          "invocation": "agy --print-timeout 15m -m gemini-2-ultra --prompt \"$(cat .ultraswarm-prompt.txt)\""
+        },
+        "expert": {
+          "model": "gemini-2-ultra",
+          "invocation": "agy --print-timeout 15m -m gemini-2-ultra --prompt \"$(cat .ultraswarm-prompt.txt)\""
+        }
+      }
+    },
+    "droid": {
+      "models": {
+        "simple": {
+          "model": "claude-haiku",
+          "invocation": "droid exec -m claude-haiku \"$(cat .ultraswarm-prompt.txt)\""
+        },
+        "moderate": {
+          "model": "claude-sonnet",
+          "invocation": "droid exec -m claude-sonnet \"$(cat .ultraswarm-prompt.txt)\""
+        },
+        "complex": {
+          "model": "claude-opus",
+          "invocation": "droid exec -m claude-opus \"$(cat .ultraswarm-prompt.txt)\""
+        },
+        "expert": {
+          "model": "claude-opus-pro",
+          "invocation": "droid exec -m claude-opus-pro \"$(cat .ultraswarm-prompt.txt)\""
+        }
+      }
+    }
+  },
+  "taskStrategies": {
+    "decomposition": {
+      "strategy": "ultra-granular",
+      "maxComplexityPerTask": 15,
+      "preferredTaskSize": "atomic",
+      "dependencies": "minimal",
+      "parallelization": "aggressive"
+    },
+    "quality": {
+      "codeReview": {
+        "allTasks": true,
+        "multipleReviewers": "complex",
+        "adversarialTesting": "high-risk"
+      },
+      "testing": {
+        "unitTests": "mandatory",
+        "integrationTests": "moderate",
+        "e2eTests": "complex"
+      }
+    }
+  }
+}
