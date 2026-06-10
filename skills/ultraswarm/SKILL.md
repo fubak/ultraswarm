@@ -395,20 +395,31 @@ const gateList = cfg.gates.map(g => `${g.name}: ${g.cmd}${g.expectedDuration ? `
 
 // Dynamic model selection based on task complexity
 const getCliCommand = (t, cli) => {
-  const modelTier = t.model_tier || 'simple'
-  const cliRegistry = cfg.registry[cli]
+  const validCli = validateCliName(cli)
+  const modelTier = validateModelTier(t.model_tier || 'simple')
+  const cliRegistry = cfg.registry[validCli]
+  
+  if (!cliRegistry) {
+    throw new Error(`CLI ${validCli} not found in registry`)
+  }
   
   if (typeof cliRegistry === 'string') {
     return cliRegistry // Legacy single-model CLI
   }
   
-  return cliRegistry[modelTier] || cliRegistry['simple'] || cliRegistry
+  const command = cliRegistry[modelTier] || cliRegistry['simple'] || cliRegistry
+  if (!command) {
+    throw new Error(`No command found for CLI ${validCli} with tier ${modelTier}`)
+  }
+  
+  return command
 }
 
 const getTimeout = (t, cli) => {
-  const modelTier = t.model_tier || 'simple'
-  const cliKey = `${cli}-${modelTier}`
-  return cfg.timeouts?.[cliKey] ?? cfg.timeouts?.[cli] ?? cfg.timeoutMs
+  const validCli = validateCliName(cli)
+  const modelTier = validateModelTier(t.model_tier || 'simple')
+  const cliKey = `${validCli}-${modelTier}`
+  return cfg.timeouts?.[cliKey] ?? cfg.timeouts?.[validCli] ?? cfg.timeoutMs
 }
 
 const enhancedImplPrompt = (t, cli, attempt, feedback) => `You are an INTELLIGENT WRAPPER around an external coding CLI with dynamic model selection. You do NOT write feature code — only orchestration and housekeeping.
@@ -541,6 +552,48 @@ ${lens === 'regression' ? `REGRESSION LENS — Breaking changes, compatibility, 
 Provide confidence score (0-100), severity assessment, and suggest alternative_approach if refuted.`
 
 const EXPERT_LENSES = ['correctness', 'security', 'regression']
+const ALLOWED_CLIS = ['codex', 'gemini', 'grok', 'agy', 'droid', 'opencode']
+const VALID_MODEL_TIERS = ['simple', 'moderate', 'complex', 'expert']
+const VALID_CLAUDE_MODELS = ['haiku', 'sonnet', 'opus']
+
+// Input validation functions
+function validateCliName(cli) {
+  if (!cli || typeof cli !== 'string') {
+    throw new Error('CLI name must be a non-empty string')
+  }
+  if (!ALLOWED_CLIS.includes(cli)) {
+    throw new Error(`Invalid CLI name: ${cli}. Allowed: ${ALLOWED_CLIS.join(', ')}`)
+  }
+  return cli
+}
+
+function validateModelTier(tier) {
+  if (!tier || typeof tier !== 'string') {
+    throw new Error('Model tier must be a non-empty string')
+  }
+  if (!VALID_MODEL_TIERS.includes(tier)) {
+    throw new Error(`Invalid model tier: ${tier}. Allowed: ${VALID_MODEL_TIERS.join(', ')}`)
+  }
+  return tier
+}
+
+function validateClaudeModel(model) {
+  if (!model || typeof model !== 'string') {
+    throw new Error('Claude model must be a non-empty string')
+  }
+  if (!VALID_CLAUDE_MODELS.includes(model)) {
+    throw new Error(`Invalid Claude model: ${model}. Allowed: ${VALID_CLAUDE_MODELS.join(', ')}`)
+  }
+  return model
+}
+
+function sanitizeTaskId(id) {
+  if (!id || typeof id !== 'string') {
+    throw new Error('Task ID must be a non-empty string')
+  }
+  // Remove any potentially dangerous characters
+  return id.replace(/[^a-zA-Z0-9_-]/g, '')
+}
 
 // Enhanced tracking with intelligence metrics
 let externalTokens = 0, tokenAttempts = 0, tokenCaptured = 0
@@ -549,41 +602,68 @@ let modelUsage = {}  // Track which models were actually used vs planned
 
 // Intelligent implementation with dynamic model routing
 async function intelligentImplement(t, cli, attempt, feedback) {
-  const modelTier = t.model_tier || 'simple'
-  const expectedModel = getCliCommand(t, cli).includes('-m ') ? 
-    getCliCommand(t, cli).match(/-m ["']?([^"'\s]+)["']?/)?.[1] : 'default'
-  
-  // Use Haiku for implementation orchestration (cost-efficient)
-  const r = await agent(enhancedImplPrompt(t, cli, attempt, feedback), { 
-    label: `impl:${t.id}:${cli}:${modelTier}#${attempt}`, 
-    phase: 'Implement', 
-    schema: IMPL_SCHEMA,
-    model: 'haiku'
-  })
-  
-  if (r) {
-    tokenAttempts += 1
-    const tokens = typeof r.cli_tokens === 'number' ? r.cli_tokens : 0
-    externalTokens += tokens
-    if (tokens > 0) tokenCaptured += 1
+  try {
+    // Validate inputs
+    const validCli = validateCliName(cli)
+    const validTaskId = sanitizeTaskId(t.id)
+    const modelTier = validateModelTier(t.model_tier || 'simple')
     
-    // Track intelligence metrics
-    complexityMetrics.planned += t.complexity_score
-    complexityMetrics.achieved += r.complexity_achieved || t.complexity_score
+    if (!Number.isInteger(attempt) || attempt < 1) {
+      throw new Error('Attempt must be a positive integer')
+    }
     
-    const actualModel = r.model_used || expectedModel
-    modelUsage[actualModel] = (modelUsage[actualModel] || 0) + 1
+    const command = getCliCommand(t, validCli)
+    const expectedModel = command.includes('-m ') ? 
+      command.match(/-m ["']?([^"'\s]+)["']?/)?.[1] : 'default'
+    
+    // Use Haiku for implementation orchestration (cost-efficient)
+    const r = await agent(enhancedImplPrompt(t, validCli, attempt, feedback), { 
+      label: `impl:${validTaskId}:${validCli}:${modelTier}#${attempt}`, 
+      phase: 'Implement', 
+      schema: IMPL_SCHEMA,
+      model: validateClaudeModel('haiku')
+    })
+    
+    if (r) {
+      tokenAttempts += 1
+      const tokens = typeof r.cli_tokens === 'number' ? r.cli_tokens : 0
+      externalTokens += tokens
+      if (tokens > 0) tokenCaptured += 1
+      
+      // Track intelligence metrics
+      complexityMetrics.planned += (t.complexity_score || 0)
+      complexityMetrics.achieved += (r.complexity_achieved || t.complexity_score || 0)
+      
+      const actualModel = r.model_used || expectedModel
+      modelUsage[actualModel] = (modelUsage[actualModel] || 0) + 1
+    }
+    
+    return r
+  } catch (error) {
+    log(`Implementation failed for ${t.id}: ${error.message}`)
+    return { 
+      status: 'cli_failed', 
+      worktree: '', 
+      branch: '', 
+      files_changed: [], 
+      gate_results: [], 
+      summary: `Implementation error: ${error.message}`, 
+      concerns: ['validation_failed'], 
+      cli_tokens: 0, 
+      model_used: 'none', 
+      complexity_achieved: 0 
+    }
   }
-  return r
 }
 
-// Adaptive QA based on task complexity and risk
-async function adaptiveQA(t, impl) {
-  const useExpertReview = t.complexity_score > 50 || t.risk === 'high'
-  const reviewModel = useExpertReview ? 'sonnet' : 'haiku'
-  
-  if (t.risk !== 'high' && t.complexity_score <= 30) {
-    // Simple task: fast review with Haiku
+// Constants for QA thresholds
+const QA_CONFIDENCE_THRESHOLD = 60
+const SIMPLE_COMPLEXITY_THRESHOLD = 30
+const EXPERT_COMPLEXITY_THRESHOLD = 50
+
+// Simple task QA: fast review with Haiku
+async function runSimpleQA(t, impl) {
+  try {
     const r = await agent(adaptiveReviewPrompt(t, impl), { 
       label: `review:${t.id}:simple`, 
       phase: 'QA', 
@@ -591,10 +671,17 @@ async function adaptiveQA(t, impl) {
       model: 'haiku'
     })
     return r ? { approve: r.approve, issues: r.issues } : { approve: false, issues: ['reviewer agent died'] }
+  } catch (error) {
+    return { approve: false, issues: [`QA error: ${error.message}`] }
   }
-  
-  if (t.risk !== 'high') {
-    // Moderate task: thorough review with Sonnet
+}
+
+// Moderate task QA: thorough review with potential expert escalation
+async function runModerateQA(t, impl) {
+  try {
+    const useExpertReview = t.complexity_score > EXPERT_COMPLEXITY_THRESHOLD || t.risk === 'high'
+    const reviewModel = useExpertReview ? 'sonnet' : 'haiku'
+    
     const r = await agent(adaptiveReviewPrompt(t, impl), { 
       label: `review:${t.id}:moderate`, 
       phase: 'QA', 
@@ -603,43 +690,90 @@ async function adaptiveQA(t, impl) {
     })
     
     if (r?.requires_expert_review) {
-      // Escalate to expert review if recommended
-      const expert = await agent(adaptiveReviewPrompt(t, impl) + '\n\nEXPERT ESCALATION: Provide detailed analysis for complex edge cases.', { 
-        label: `review:${t.id}:expert`, 
-        phase: 'QA', 
-        schema: ENHANCED_REVIEW_SCHEMA,
-        model: 'opus'
-      })
-      return expert ? { approve: expert.approve, issues: expert.issues } : { approve: false, issues: ['expert review failed'] }
+      return await runExpertEscalation(t, impl)
     }
     
     return r ? { approve: r.approve, issues: r.issues } : { approve: false, issues: ['reviewer agent died'] }
+  } catch (error) {
+    return { approve: false, issues: [`QA error: ${error.message}`] }
+  }
+}
+
+// Expert escalation QA: detailed analysis with Opus
+async function runExpertEscalation(t, impl) {
+  try {
+    const expert = await agent(adaptiveReviewPrompt(t, impl) + '\n\nEXPERT ESCALATION: Provide detailed analysis for complex edge cases.', { 
+      label: `review:${t.id}:expert`, 
+      phase: 'QA', 
+      schema: ENHANCED_REVIEW_SCHEMA,
+      model: 'opus'
+    })
+    return expert ? { approve: expert.approve, issues: expert.issues } : { approve: false, issues: ['expert review failed'] }
+  } catch (error) {
+    return { approve: false, issues: [`Expert QA error: ${error.message}`] }
+  }
+}
+
+// High-risk adversarial QA: multi-lens expert review
+async function runAdversarialQA(t, impl) {
+  try {
+    const votes = (await parallel(EXPERT_LENSES.map(lens => () =>
+      agent(expertLensPrompt(lens, t, impl), { 
+        label: `verify:${t.id}:${lens}`, 
+        phase: 'QA', 
+        schema: EXPERT_VERDICT_SCHEMA,
+        model: 'opus'
+      })))).filter(Boolean)
+    
+    const weightedScore = votes.reduce((sum, v) => sum + (v.refuted ? 0 : v.confidence), 0) / votes.length
+    const ok = weightedScore >= QA_CONFIDENCE_THRESHOLD
+    const criticalIssues = votes.filter(v => v.refuted && v.severity === 'critical')
+    
+    const issues = [
+      ...votes.filter(v => v.refuted).flatMap(v => v.reasons),
+      ...(criticalIssues.length > 0 ? ['CRITICAL issues found - requires immediate attention'] : []),
+      ...(votes.length < 2 ? ['adversarial verification could not complete'] : []),
+    ]
+    return { approve: ok, issues }
+  } catch (error) {
+    return { approve: false, issues: [`Adversarial QA error: ${error.message}`] }
+  }
+}
+
+// Main adaptive QA dispatcher - routes to appropriate QA strategy
+async function adaptiveQA(t, impl) {
+  if (t.risk === 'high') {
+    return await runAdversarialQA(t, impl)
   }
   
-  // High-risk task: expert adversarial review with Opus
-  const votes = (await parallel(EXPERT_LENSES.map(lens => () =>
-    agent(expertLensPrompt(lens, t, impl), { 
-      label: `verify:${t.id}:${lens}`, 
-      phase: 'QA', 
-      schema: EXPERT_VERDICT_SCHEMA,
-      model: 'opus'
-    })))).filter(Boolean)
+  if (t.complexity_score <= SIMPLE_COMPLEXITY_THRESHOLD) {
+    return await runSimpleQA(t, impl)
+  }
   
-  const weightedScore = votes.reduce((sum, v) => sum + (v.refuted ? 0 : v.confidence), 0) / votes.length
-  const ok = weightedScore >= 60  // Require 60% confidence threshold
-  const criticalIssues = votes.filter(v => v.refuted && v.severity === 'critical')
-  
-  const issues = [
-    ...votes.filter(v => v.refuted).flatMap(v => v.reasons),
-    ...(criticalIssues.length > 0 ? ['CRITICAL issues found - requires immediate attention'] : []),
-    ...(votes.length < 2 ? ['adversarial verification could not complete'] : []),
-  ]
-  return { approve: ok, issues }
+  return await runModerateQA(t, impl)
 }
-// Enhanced attempt loop with intelligent model escalation
+/**
+ * Enhanced attempt loop with intelligent model escalation
+ * @param {Object} t - Task object with complexity scoring and dependencies
+ * @param {string} cli - CLI name to use for implementation attempts
+ * @param {number} maxAttempts - Maximum number of implementation attempts
+ * @param {string[]} seedFeedback - Initial feedback from previous attempts
+ * @param {number} attemptOffset - Starting attempt number offset
+ * @returns {Promise<Object>} Result object with success status and metrics
+ */
 async function intelligentAttemptLoop(t, cli, maxAttempts, seedFeedback, attemptOffset = 0) {
-  let feedback = seedFeedback
-  let currentModelTier = t.model_tier
+  try {
+    // Validate inputs
+    const validCli = validateCliName(cli)
+    if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
+      throw new Error('maxAttempts must be a positive integer')
+    }
+    if (!Array.isArray(seedFeedback)) {
+      throw new Error('seedFeedback must be an array')
+    }
+    
+    let feedback = seedFeedback
+    let currentModelTier = validateModelTier(t.model_tier || 'simple')
   
   for (let n = 1; n <= maxAttempts; n++) {
     const attempt = attemptOffset + n
@@ -672,27 +806,60 @@ async function intelligentAttemptLoop(t, cli, maxAttempts, seedFeedback, attempt
       final_model_tier: currentModelTier, complexity_achieved: impl.complexity_achieved 
     }
     feedback = [...feedback, ...verdict.issues]
-    log(`${t.id}: attempt ${attempt} on ${cli}/${currentModelTier} rejected (${verdict.issues.length} issues)`)
+    log(`${t.id}: attempt ${attempt} on ${validCli}/${currentModelTier} rejected (${verdict.issues.length} issues)`)
   }
   return { exhausted: true, feedback, final_model_tier: currentModelTier }
+  } catch (error) {
+    log(`Attempt loop failed for ${t.id}: ${error.message}`)
+    return { exhausted: true, feedback: [...seedFeedback, `Attempt loop error: ${error.message}`], final_model_tier: t.model_tier || 'simple' }
+  }
 }
 
-// Enhanced task execution with dependency coordination
-async function runIntelligentTask(t) {
-  log(`Starting ${t.id}: complexity ${t.complexity_score}/100, model tier ${t.model_tier}, deps: ${t.dependencies?.join(',') || 'none'}`)
-  
-  if (t.risk === 'high' || t.complexity_score > 70) {
-    // High-risk/complex: multi-CLI competition with intelligent judging
+// Constants for task execution
+const COMPLEX_THRESHOLD = 70
+const COMPLEXITY_WEIGHT = 0.4
+const EFFICIENCY_WEIGHT = 0.3
+const MODEL_WEIGHT = 0.3
+
+// Competition between multiple CLIs for high-risk/complex tasks
+async function runCompetitiveTask(t) {
+  try {
     const competitors = [t.cli, cfg.alternates[t.cli]].filter(c => c && cfg.registry[c])
     log(`${t.id} (${t.risk === 'high' ? 'high risk' : 'complex'}): competing on ${competitors.join(' vs ')}`)
     
     const all = (await parallel(competitors.map(c => () =>
       intelligentImplement(t, c, 1, []).then(i => i && { ...i, cli: c })))).filter(Boolean)
     const impls = all.filter(i => i.status === 'ok')
-    let winner = impls[0], graft = []
     
-    if (impls.length > 1) {
-      // Intelligent judging with multi-dimensional scoring
+    if (impls.length === 0) {
+      return await handleFailedCompetition(t, all)
+    }
+    
+    const { winner, graft } = await judgeCompetition(t, impls)
+    
+    if (winner) {
+      const verdict = await adaptiveQA(t, winner)
+      if (verdict.approve) {
+        return { 
+          task: t.id, cli: winner.cli, impl: winner, attempts: 1, graft,
+          final_model_tier: winner.model_used, complexity_achieved: winner.complexity_achieved 
+        }
+      }
+    }
+    
+    return await handleFailedCompetition(t, all, winner)
+  } catch (error) {
+    log(`Competition failed for ${t.id}: ${error.message}`)
+    return { task: t.id, failed: true, error: error.message }
+  }
+}
+
+// Judge competition between implementations
+async function judgeCompetition(t, impls) {
+  let winner = impls[0], graft = []
+  
+  if (impls.length > 1) {
+    try {
       const scores = (await parallel(impls.map(i => () =>
         agent(intelligentJudgePrompt(t, i), { 
           label: `judge:${t.id}:${i.cli}`, 
@@ -703,45 +870,68 @@ async function runIntelligentTask(t) {
       
       // Weight by complexity handling and model efficiency
       scores.forEach(x => {
-        x.weighted_score = x.s.score * 0.4 + x.s.complexity_handling * 0.3 + x.s.model_efficiency * 0.3
+        x.weighted_score = x.s.score * COMPLEXITY_WEIGHT + 
+                          x.s.complexity_handling * EFFICIENCY_WEIGHT + 
+                          x.s.model_efficiency * MODEL_WEIGHT
       })
       scores.sort((a, b) => b.weighted_score - a.weighted_score)
       
       winner = scores[0]?.i ?? winner
       graft = scores.slice(1).flatMap(x => x.s.graft_ideas)
+    } catch (error) {
+      log(`Judging failed for ${t.id}: ${error.message}`)
     }
-    
-    if (winner) {
-      const verdict = await adaptiveQA(t, winner)
-      if (verdict.approve) return { 
-        task: t.id, cli: winner.cli, impl: winner, attempts: 1, graft,
-        final_model_tier: winner.model_used, complexity_achieved: winner.complexity_achieved 
-      }
-    }
-    
-    // Continue with retry logic for failed competition...
-    const retryCli = winner ? winner.cli : t.cli
-    const seed = all.filter(i => i.status !== 'ok').map(i => {
-      const gates = (i.gate_results || []).filter(g => !g.pass).map(g => `${g.name}: ${g.detail}`).join('; ')
-      return `competition attempt (${i.cli}): ${i.status} — ${i.summary}${gates ? ` · gates: ${gates}` : ''}`
-    })
-    
-    const retried = await intelligentAttemptLoop(t, retryCli, 2, seed, 1)
-    if (!retried.exhausted) return { ...retried, graft }
-    
-    const fallback = await intelligentAttemptLoop(t, cfg.alternates[retryCli], 2,
-      [...retried.feedback, `prior CLI (${retryCli}) exhausted`], 3)
-    return fallback.exhausted ? { task: t.id, failed: true } : { ...fallback, graft }
   }
   
-  // Standard task: single CLI with intelligent retries
-  const primary = await intelligentAttemptLoop(t, t.cli, 3, [])
-  if (!primary.exhausted) return primary
+  return { winner, graft }
+}
+
+// Handle failed competition with retry logic
+async function handleFailedCompetition(t, all, winner = null) {
+  const retryCli = winner ? winner.cli : t.cli
+  const seed = all.filter(i => i.status !== 'ok').map(i => {
+    const gates = (i.gate_results || []).filter(g => !g.pass).map(g => `${g.name}: ${g.detail}`).join('; ')
+    return `competition attempt (${i.cli}): ${i.status} — ${i.summary}${gates ? ` · gates: ${gates}` : ''}`
+  })
   
-  log(`${t.id}: ${t.cli} exhausted, reassigning to ${cfg.alternates[t.cli]}`)
-  const fallback = await intelligentAttemptLoop(t, cfg.alternates[t.cli], 2,
-    [...primary.feedback, `prior CLI (${t.cli}) exhausted`], 3)
+  const retried = await intelligentAttemptLoop(t, retryCli, 2, seed, 1)
+  if (!retried.exhausted) return { ...retried, graft: [] }
+  
+  const fallback = await intelligentAttemptLoop(t, cfg.alternates[retryCli], 2,
+    [...retried.feedback, `prior CLI (${retryCli}) exhausted`], 3)
   return fallback.exhausted ? { task: t.id, failed: true } : fallback
+}
+
+// Standard single-CLI task execution
+async function runStandardTask(t) {
+  try {
+    const primary = await intelligentAttemptLoop(t, t.cli, 3, [])
+    if (!primary.exhausted) return primary
+    
+    log(`${t.id}: ${t.cli} exhausted, reassigning to ${cfg.alternates[t.cli]}`)
+    const fallback = await intelligentAttemptLoop(t, cfg.alternates[t.cli], 2,
+      [...primary.feedback, `prior CLI (${t.cli}) exhausted`], 3)
+    return fallback.exhausted ? { task: t.id, failed: true } : fallback
+  } catch (error) {
+    log(`Standard task failed for ${t.id}: ${error.message}`)
+    return { task: t.id, failed: true, error: error.message }
+  }
+}
+
+/**
+ * Main intelligent task execution dispatcher
+ * Routes tasks to appropriate execution strategy based on risk and complexity
+ * @param {Object} t - Task object with complexity scoring and metadata
+ * @returns {Promise<Object>} Execution result with success/failure status and metrics
+ */
+async function runIntelligentTask(t) {
+  log(`Starting ${t.id}: complexity ${t.complexity_score}/100, model tier ${t.model_tier}, deps: ${t.dependencies?.join(',') || 'none'}`)
+  
+  if (t.risk === 'high' || t.complexity_score > COMPLEX_THRESHOLD) {
+    return await runCompetitiveTask(t)
+  }
+  
+  return await runStandardTask(t)
 }
 
 // Enhanced execution with intelligent dependency coordination
