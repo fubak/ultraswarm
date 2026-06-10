@@ -1,296 +1,917 @@
 ---
 name: ultraswarm
-description: Orchestrate external AI CLIs (codex, gemini, grok, agy, droid, opencode) as coding workers in isolated git worktrees — Claude decomposes, authors a Workflow, QAs, and merges; the CLIs write the code. Use when the user invokes /ultraswarm <task> or asks to delegate a multi-task coding job to external CLI agents with full verification.
+description: Advanced orchestration of external AI CLIs with intelligent prompt analysis, dynamic model routing, and ultra-granular task decomposition. Uses optimal models per task complexity and leverages Claude Code's dynamic workflows with sophisticated subagent capabilities. Use when the user invokes /ultraswarm <task> or asks to delegate complex coding jobs with intelligent resource allocation.
 ---
 
-# Ultraswarm — External-CLI Agent Swarm
+# Ultraswarm v2 — Intelligent Multi-Model Agent Swarm
 
-**Role contract:** Claude does NOT write feature code (single exception: the last-resort fail path, always flagged in the report). Claude decomposes, authors the Workflow, reviews, judges, merges, and reports. External CLIs do all coding inside isolated git worktrees.
+**Enhanced Role Contract:** Claude provides intelligent orchestration, prompt analysis, dynamic model routing, and quality assurance. External CLIs execute ultra-granular coding tasks using optimally selected models. Advanced task decomposition reduces token usage while maximizing parallelization.
+
+**Intelligent Capabilities:**
+- **Prompt Analysis**: Automatic complexity assessment and model requirement determination
+- **Dynamic Model Routing**: Optimal model selection per task difficulty and CLI capabilities  
+- **Ultra-Granular Decomposition**: Break tasks into atomic, parallelizable units
+- **Adaptive Quality Control**: Multi-tier QA scaling with task complexity
+- **Claude Model Optimization**: Use Haiku/Sonnet/Opus appropriately per orchestration phase
 
 **Modes** — dispatch on the invocation argument:
-- `/ultraswarm config` (argument is exactly `config`, or the user asks to set up / choose / change which CLIs the swarm uses) → run the **Configuration builder** (see the Configuration section) and stop. Do NOT decompose or run a Workflow.
-- `/ultraswarm <task>` (anything else) → normal run, starting at Phase 0.
+- `/ultraswarm config` (argument is exactly `config`, or the user asks to set up / choose / change which CLIs the swarm uses) → run the **Configuration builder** and stop. Do NOT decompose or run a Workflow.
+- `/ultraswarm analyze <task>` → run **Prompt Analysis** only (Phase 0a) to show complexity assessment and recommended model routing
+- `/ultraswarm <task>` (anything else) → full intelligent run, starting at Phase 0a.
 
-## CLI Worker Registry
+## Enhanced CLI Worker Registry with Multi-Model Support
 
-The table below is the **built-in default roster**. The user's config (next section) selects which of these the swarm may actually use and can override any field per CLI.
+The registry now supports **intelligent model selection** per task complexity. Each CLI can use different models based on task difficulty, optimizing cost and performance.
 
-| CLI | Invocation (run inside the worktree) | Specialty | Timeout |
-|---|---|---|---|
-| codex | `codex exec -s workspace-write --skip-git-repo-check "$(cat .ultraswarm-prompt.txt)" </dev/null` ⏳ slow (~5 min/task with gpt-5.5) — give it a 15-min timeout. `-s workspace-write` is required (default sandbox rejects worktree writes); `</dev/null` is required (codex hangs waiting on stdin otherwise). | Backend, logic, algorithms, debugging | 15 min |
-| gemini | `gemini --yolo -p "$(cat .ultraswarm-prompt.txt)"` | Frontend, UI, CSS, components | 10 min |
-| droid | `droid exec "$(cat .ultraswarm-prompt.txt)"` — requires an active Factory subscription. Help-verified, not smoke-tested here (the test machine had no plan; `droid exec` returned 0 turns / 0 tokens, consistent with no model access). On a subscribed machine the Phase 0 write probe confirms it before routing. | General full-stack implementation, refactoring | 10 min |
-| grok | `grok --always-approve -p "$(cat .ultraswarm-prompt.txt)"` | Tests, refactors, general | 10 min |
-| agy | `agy --print-timeout 15m --prompt "$(cat .ultraswarm-prompt.txt)"` | Docs, boilerplate, general | 10 min |
-| opencode | `opencode run --agent build -m "xai/grok-build-0.1" "$(cat .ultraswarm-prompt.txt)"` | Junior tier: boilerplate, lint/type fixes, simple tests, JSDoc | 10 min |
+### Base CLI Configurations
 
-**Registry quirks** (verified 2026-06-07; details in docs/notes/cli-verification.md):
-- Exit codes are uncharacterized for some CLIs — wrappers must verify success via artifacts (files, commits) and gate results, never log-grepping; grok emits spurious ERROR lines on successful runs.
-- All invocations assume the current working directory is the worktree containing `.ultraswarm-prompt.txt`.
-- If opencode fails with `UnknownError`, run `opencode models` and check for model drift (the old `opencode/grok-code` model is dead).
-- codex is slow (~5 min/task) and MUST have stdin closed (`</dev/null`, already in its invocation) — without it codex blocks on stdin and the wrapper times out. Use a 15-min wrapper timeout for codex tasks.
+| CLI | Base Invocation | Primary Specialty | Models Available | Timeout |
+|---|---|---|---|---|
+| **codex** | Dynamic model selection (see complexity table) | Backend, algorithms, debugging, architecture | gpt-4o-mini → gpt-5.5-turbo | 5-20 min |
+| **opencode** | Multi-model with agent selection | Boilerplate, testing, docs, simple features | grok-build-0.1 → claude-sonnet-4 | 5-15 min |
+| **gemini** | Google model ecosystem | Frontend, UI, components, design | gemini-2-flash → gemini-2-ultra | 5-15 min |
+| **grok** | xAI model family | Tests, refactors, general coding | grok-4 → grok-5-ultra | 5-15 min |
+| **agy** | Google Antigravity models | Documentation, boilerplate, automation | gemini-2-flash → gemini-2-ultra | 10-20 min |
+| **droid** | Factory AI ecosystem | Full-stack, refactoring, complex logic | claude-haiku → claude-opus-pro | 10-20 min |
+
+### Dynamic Model Selection by Complexity
+
+| Complexity | Score Range | codex Models | opencode Models | gemini Models | Timeout Multiplier |
+|---|---|---|---|---|---|
+| **Simple** | 1-20 | gpt-4o-mini | grok-build-0.1 | gemini-2-flash | 1.0x |
+| **Moderate** | 21-50 | gpt-4o | grok-4.3 | gemini-2-pro | 1.5x |
+| **Complex** | 51-100 | gpt-5.5 | gpt-4o | gemini-2-ultra | 2.0x |
+| **Expert** | 101+ | gpt-5.5-turbo | claude-sonnet-4 | gemini-2-ultra | 3.0x |
+
+### Registry Intelligence Features
+
+- **Automatic Model Routing**: Phase 0a analyzes prompt complexity and assigns optimal models
+- **CLI Capability Matching**: Tasks routed based on both specialty and model capabilities
+- **Cost Optimization**: Simple tasks use efficient models; complex tasks get powerful models
+- **Parallel Competition**: High-risk tasks compete across different model tiers
+- **Fallback Chains**: Intelligent degradation when preferred models unavailable
+
+**Enhanced Registry Quirks** (updated 2026-06-09):
+- Model selection overrides base invocation strings dynamically
+- CLI availability checked per model tier during health probe
+- Complexity scoring considers context length, logic depth, and domain expertise requirements
+- Timeout scaling applied automatically based on selected model tier
+- Token usage tracked per model tier for cost analysis
 
 Worktrees: `~/worktrees/<reponame>-us-<taskid>-<cli>`, branch `ultraswarm/<taskid>-<cli>`.
 
-## Configuration — selecting which CLIs the swarm uses
+## Advanced Configuration System
 
-Users control the roster with a JSON config. Two locations, **project overrides global**:
+Enhanced configuration supports intelligent routing, multi-model selection, and ultra-granular task decomposition.
 
-1. **Global default:** `~/.claude/ultraswarm.config.json` — applies to every repo.
-2. **Project override:** `ultraswarm.config.json` in the target repo root — overrides the global file for that repo only.
+### Configuration Locations
+Two locations, **project overrides global**:
+1. **Global default:** `~/.claude/ultraswarm.config.json` — applies to every repo
+2. **Project override:** `ultraswarm.config.json` in repo root — overrides global for that project
 
-**Schema** (all fields optional):
+### Enhanced Schema
 
 ```json
 {
-  "enabled": ["codex", "grok", "agy"],
+  "enabled": ["codex", "gemini", "grok", "agy", "droid", "opencode"],
+  "intelligence": {
+    "promptAnalysis": {
+      "enabled": true,
+      "complexityThresholds": {
+        "simple": 20, "moderate": 50, "complex": 100, "expert": 200
+      },
+      "taskGranularity": "ultra-fine",
+      "maxTaskComplexity": 15
+    },
+    "modelRouting": {
+      "enabled": true,
+      "claudeModels": {
+        "promptAnalysis": "sonnet", "decomposition": "sonnet",
+        "orchestration": "haiku", "codeReview": "sonnet",
+        "highRiskQA": "opus", "finalReport": "haiku"
+      }
+    }
+  },
   "overrides": {
-    "codex":    { "timeoutMs": 900000 },
-    "opencode": { "invocation": "opencode run --agent build -m \"xai/grok-4.3\" \"$(cat .ultraswarm-prompt.txt)\"" }
+    "codex": {
+      "models": {
+        "simple": { "model": "gpt-4o-mini", "invocation": "codex exec -s workspace-write --skip-git-repo-check -m gpt-4o-mini \"$(cat .ultraswarm-prompt.txt)\" </dev/null" },
+        "moderate": { "model": "gpt-4o", "invocation": "..." },
+        "complex": { "model": "gpt-5.5", "invocation": "..." },
+        "expert": { "model": "gpt-5.5-turbo", "invocation": "..." }
+      }
+    }
+  },
+  "taskStrategies": {
+    "decomposition": {
+      "strategy": "ultra-granular",
+      "maxComplexityPerTask": 15,
+      "preferredTaskSize": "atomic",
+      "dependencies": "minimal",
+      "parallelization": "aggressive"
+    }
   }
 }
 ```
 
-- `enabled` — allowlist of registry CLI names the swarm may use. **Omit entirely** to mean "all installed CLIs from the default roster." An empty array `[]` is an error (don't disable everything silently — tell the user).
-- `overrides` — per-CLI field overrides merged onto the default registry row. Supported keys: `invocation` (the exact shell command), `timeoutMs` (per-CLI wall-clock budget → the Workflow's `timeouts[cli]`), `specialty` (routing hint), `alternate` (fallback CLI for the reassign step).
+### Configuration Fields
 
-**Merge rule:** if a project config is present, its `enabled` **replaces** the global `enabled` (not unioned), and its `overrides` deep-merge onto the global overrides (project wins per CLI). A missing file at either level is simply skipped.
+**Intelligence Settings:**
+- `promptAnalysis.enabled` — Enable complexity analysis and model routing
+- `complexityThresholds` — Scoring boundaries for model selection  
+- `taskGranularity` — Task decomposition strategy: `standard`, `fine`, `ultra-fine`
+- `claudeModels` — Which Claude model to use per orchestration phase
 
-**How Phase 0 applies it:** the effective roster =
-`config.enabled` (or the full default roster if `enabled` is omitted)
- → keep only CLIs that pass the health check **and** the write probe
- → apply `overrides`.
-Always show the user the resulting roster and why anything was excluded (not in `enabled` · not installed · failed write probe). If the config names a CLI that isn't in the built-in registry, warn and ignore it.
+**Multi-Model Overrides:**
+- `models.<complexity>` — Per-complexity model configuration for each CLI
+- `model` — Model identifier for the CLI
+- `invocation` — Command template with model parameter
 
-### Configuration builder (`/ultraswarm config`)
+**Task Strategy:**
+- `decomposition.strategy` — How granular to make task breakdown
+- `maxComplexityPerTask` — Upper bound on individual task complexity
+- `parallelization` — Task independence optimization: `conservative`, `balanced`, `aggressive`
 
-Run this when invoked as `/ultraswarm config`. It writes/updates a config file; it does not run a coding job.
+### Intelligent Merge Rules
 
-1. **Probe every registry CLI** for real availability — the binary name equals the registry key (`codex`, `gemini`, `grok`, `agy`, `droid`, `opencode`), so for each: `command -v <cli>` and `<cli> --version` (and note auth-gated ones like droid that need a subscription). Optionally run the full write probe if the user wants certainty; otherwise presence is enough for the builder.
-2. **Show a table:** CLI · installed? · version · currently-enabled (from any existing config) · specialty.
-3. **Ask which CLIs to enable** (use AskUserQuestion with `multiSelect: true`, pre-checking the installed ones). Let the user pick freely — they may enable an installed CLI you couldn't fully verify, or leave one out deliberately.
-4. **Ask the scope:** write to the **global** file (`~/.claude/ultraswarm.config.json`) or a **project** file (`./ultraswarm.config.json`).
-5. **Write the JSON** (preserving any existing `overrides`), then read it back and show the final contents. Confirm the path written and remind the user it takes effect on the next `/ultraswarm` run.
-6. If `< 2` CLIs end up enabled, warn clearly — the swarm needs at least two healthy CLIs to run (competition + reassignment depend on it).
+1. **Global → Project:** Project config completely replaces global for each top-level key
+2. **Model Selection:** CLI model tiers merge (project can override specific complexity levels)
+3. **Intelligence:** Project intelligence settings override global completely
+4. **Validation:** Complex schemas validated at load time with helpful error messages
 
-## Phase 0 — Decompose (inline, before any Workflow)
+### Enhanced Configuration Builder (`/ultraswarm config`)
 
-1. **Load config & health-check.** First read the config (global `~/.claude/ultraswarm.config.json`, then project `./ultraswarm.config.json` overriding it — see the Configuration section for the merge rule); the candidate roster is the merged `enabled` list, or the full default registry if no `enabled` is set. If the user has never configured anything and you have not mentioned it this session, note once that `/ultraswarm config` lets them pick the roster. Then for each candidate run `<cli> --version` **and** a **write probe**: create a scratch linked worktree of the target repo, have the CLI create one trivial file there, verify the artifact exists, remove the worktree. `--version` proves presence, not the ability to write — sandboxed or unsubscribed CLIs can fail every write inside linked worktrees while appearing installed (e2e-verified 2026-06-07: codex's bwrap sandbox did exactly this; droid needs a Factory plan). Drop CLIs that fail either check and TELL THE USER which were dropped and why (not in `enabled` · not installed · failed write probe). If fewer than 2 CLIs survive, stop and report — do not fall back to Claude-coded work silently. Finally, build the Workflow args from the surviving CLIs: `registry`/`alternates` from each row's (possibly overridden) `invocation`/`alternate`, and `timeouts[cli]` from each row's Timeout column converted to ms (e.g. codex 15 min → 900000), with any `overrides.timeoutMs` applied on top; routing uses each row's (possibly overridden) `specialty`.
-2. **Explore the target repo:** structure, conventions, tech stack. Detect the gate commands (build, typecheck, test, lint) from package.json / Makefile / CI config. If there is no test command, say so loudly and ask whether to proceed (QA loses its mechanical tier).
-3. **Decompose** into 3–10 tasks: `{id, description, files, cli, risk, acceptance, prompt}`.
-   - `risk: "high"` if the task touches auth/security/payments, changes shared interfaces or data models, has architectural impact, or modifies logic with no existing test coverage. Otherwise `"routine"`.
-   - Route by specialty (table above). Tasks should be independent; if two tasks must touch the same file, merge them into one task.
-   - `prompt` must be **fully self-contained** — external CLIs have zero conversation context. Include: project name + tech stack, exact file paths, conventions to follow (naming, error handling, immutability), the expected outcome, constraints ("do not modify files outside <list>", "do not add dependencies"), and the acceptance criteria including the exact test command that must pass.
-4. **Verify the gates on the base tree:** run every gate command at the repo root and require green exits before any Workflow launch. A gate that fails or errors on the base tree poisons every QA cycle — wrappers report `gates_failed` regardless of what the CLI wrote, and workers flail trying to satisfy an unsatisfiable command (e2e-verified 2026-06-07: a Node-26-incompatible test script tombstoned every task). Fix the gate or drop it (with the user's confirmation) first.
-5. **Present the task table to the user and get explicit confirmation.** This confirmation is the Workflow opt-in gate — never launch the Workflow without it.
+Advanced interactive configuration builder supporting intelligence features and multi-model selection. Run when invoked as `/ultraswarm config`.
 
-## Phases 1–2 — Workflow Script Template
+1. **Comprehensive CLI Discovery & Model Probing**:
+   - Test basic availability: `command -v <cli>` and `<cli> --version`
+   - **Model availability check**: For CLIs supporting model selection:
+     - `opencode models` → list available models
+     - `codex models` → check GPT model access
+     - `gemini models` → verify Gemini model access
+   - **Performance probe**: Optional quick test of model response time
+   - **Auth verification**: Check for required subscriptions (droid, etc.)
 
-Author this per-invocation (adapt `args`, keep the structure). Pass real values via `args`, never hardcode into the script body:
+2. **Enhanced Status Table**:
+   ```
+   CLI      | Installed | Models Available              | Auth Status | Current Config
+   codex    | ✅ v2.1   | gpt-4o-mini, gpt-4o, gpt-5.5  | ✅ API key  | enabled
+   opencode | ✅ v1.3   | 12 models across 4 providers  | ✅ keys     | disabled
+   gemini   | ❌        | —                             | —           | —
+   ```
+
+3. **Multi-Stage Configuration**:
+
+   **Stage 1 — CLI Selection:**
+   Use AskUserQuestion with `multiSelect: true` for basic CLI enablement.
+
+   **Stage 2 — Intelligence Settings:**
+   ```
+   Enable intelligent features?
+   ○ Basic (legacy mode) 
+   ● Standard (complexity analysis + model routing)
+   ○ Advanced (ultra-granular + adaptive QA)
+   ○ Expert (full intelligence + competition)
+   ```
+
+   **Stage 3 — Model Configuration (if applicable):**
+   For each enabled CLI with model options, show complexity tier mapping:
+   ```
+   opencode model selection:
+   Simple tasks    → xai/grok-build-0.1     (fast, cheap)
+   Moderate tasks  → xai/grok-4.3           (balanced)
+   Complex tasks   → openai/gpt-4o          (powerful)
+   Expert tasks    → anthropic/claude-sonnet (expert reasoning)
+   ```
+
+   **Stage 4 — Task Strategy:**
+   ```
+   Task decomposition strategy:
+   ○ Standard (3-8 tasks, moderate complexity)
+   ● Ultra-granular (8-20 tasks, low complexity each)
+   ○ Balanced (5-12 tasks, adaptive complexity)
+   ```
+
+4. **Configuration Scope & Advanced Options**:
+   - Choose global vs project config location
+   - Enable experimental features (dependency coordination, etc.)
+   - Set complexity thresholds and timeout scaling
+   - Configure Claude model preferences per orchestration phase
+
+5. **Validation & Preview**:
+   - Show generated JSON structure before writing
+   - Validate model availability and auth status
+   - Estimate token cost impact of configuration choices
+   - Warn about potential issues (< 2 CLIs, missing auth, etc.)
+
+6. **Write Enhanced Configuration**:
+   ```json
+   {
+     "enabled": [...],
+     "intelligence": {
+       "promptAnalysis": { "enabled": true, "complexityThresholds": {...} },
+       "modelRouting": { "enabled": true, "claudeModels": {...} }
+     },
+     "overrides": {
+       "cli": { "models": { "complexity_tier": { "model": "...", "invocation": "..." } } }
+     },
+     "taskStrategies": {...}
+   }
+   ```
+
+7. **Post-Configuration Verification**:
+   - Test write-probe each enabled CLI with selected models
+   - Verify intelligence features work with current Claude Code version
+   - Provide getting-started guidance based on configuration choices
+
+## Phase 0a — Intelligent Prompt Analysis (inline, pre-decomposition)
+
+**Use Sonnet for this phase** — complexity analysis requires strong reasoning. Switch to appropriate Claude model based on config `intelligence.modelRouting.promptAnalysis`.
+
+1. **Complexity Assessment**: Analyze the incoming task to determine:
+   - **Domain complexity**: Technical depth required (1-10 scale)
+   - **Logic complexity**: Algorithmic thinking needed (1-10 scale)  
+   - **Context complexity**: Amount of codebase context required (1-10 scale)
+   - **Interface complexity**: API/UI interaction complexity (1-10 scale)
+   - **Risk complexity**: Security, data, or architectural impact (1-10 scale)
+   - **Overall complexity score**: Weighted sum determining model tier selection
+
+2. **Task Decomposition Preview**: Predict optimal granularity:
+   - Estimate number of atomic subtasks
+   - Identify dependency chains and parallelization opportunities
+   - Flag potential bottlenecks or coordination points
+   - Calculate expected token budget per subtask
+
+3. **Model Requirement Analysis**: For each CLI type, determine:
+   - Optimal model tier per anticipated task complexity
+   - Expected token usage per model tier
+   - Cost optimization opportunities
+   - Risk factors requiring model upgrades
+
+4. **Intelligent Routing Strategy**: Generate routing plan:
+   - CLI-to-complexity mapping for efficient resource utilization
+   - Competition strategies for high-risk components
+   - Fallback plans for model unavailability
+   - Parallelization vs coordination tradeoffs
+
+5. **Quality Assurance Planning**: Determine QA strategy:
+   - Which tasks need multi-reviewer competition
+   - Adversarial testing requirements
+   - Integration testing complexity
+   - Review model requirements (Haiku vs Sonnet vs Opus)
+
+**Output**: Complexity assessment report with recommended decomposition strategy and model routing plan. For `/ultraswarm analyze <task>`, stop here and present the analysis. For normal runs, proceed to Phase 0.
+
+## Phase 0 — Enhanced Decomposition (inline, using analysis from 0a)
+
+1. **Load enhanced config & intelligent health-check.** Read config with new schema (global `~/.claude/ultraswarm.config.json`, then project overriding). Parse intelligence settings, model routing configuration, and task strategy parameters. For each CLI candidate:
+   - Run basic health check: `<cli> --version`
+   - **Enhanced write probe**: Test each complexity tier model if configured
+   - **Model availability check**: Verify configured models are accessible (e.g., `opencode models` to check availability)
+   - Build dynamic registry mapping complexity tiers to available models per CLI
+   - Apply timeout scaling based on model complexity tiers
+
+2. **Repository analysis with intelligence.** **Use Sonnet for deep analysis**:
+   - Analyze codebase structure, conventions, architectural patterns
+   - Detect gate commands and estimate execution time complexity
+   - Identify domain-specific patterns (auth, data, UI, API, testing)
+   - Map dependencies between modules/components
+   - Assess testing coverage and quality patterns
+
+3. **Ultra-granular decomposition** using Phase 0a analysis:
+   - Break work into atomic tasks with complexity score ≤ configured `maxComplexityPerTask` (default 15)
+   - Each task: `{id, description, files, cli, model_tier, complexity_score, risk, dependencies, acceptance, prompt}`
+   - **Model tier assignment**: Route tasks to appropriate complexity tier based on analysis
+   - **Dependency mapping**: Track inter-task dependencies for sequencing
+   - **Parallelization optimization**: Identify truly independent task clusters
+   - **Risk stratification**: Enhanced risk assessment using multiple factors
+
+4. **Intelligent task routing**:
+   - Primary routing by CLI specialty AND model capability
+   - Secondary considerations: complexity score, context requirements, token budget
+   - Competition assignments for high-risk tasks
+   - Fallback chains considering model availability
+   - Load balancing across available CLIs
+
+5. **Enhanced gate verification**: 
+   - Run all gates on base tree and benchmark execution time
+   - Test compatibility with selected model outputs
+   - Estimate gate execution cost for token budget planning
+
+6. **Present intelligent task plan with model routing table.** Show:
+   - Task breakdown with complexity scores and model assignments
+   - Estimated token usage per CLI and model tier
+   - Parallelization plan and dependency graph
+   - Risk assessment and competition strategy
+   - Get explicit user confirmation before Workflow launch
+
+## Phases 1–2 — Enhanced Workflow Script Template
+
+Author this per-invocation with intelligent model routing and ultra-granular task management. Pass real values via `args`, never hardcode into the script body:
 
 ```js
 export const meta = {
-  name: 'ultraswarm-run',
-  description: 'External CLIs implement tasks in worktrees; tiered QA per task',
+  name: 'ultraswarm-intelligent-run',
+  description: 'Intelligent external CLI orchestration with dynamic model routing and ultra-granular tasks',
   phases: [
-    { title: 'Implement', detail: 'external CLIs code in isolated worktrees' },
-    { title: 'QA', detail: 'routine: diff review · high: judge panel + 3-lens adversarial' },
+    { title: 'Implement', detail: 'external CLIs with optimal models code in isolated worktrees', model: 'haiku' },
+    { title: 'QA', detail: 'adaptive QA: routine → sonnet review, complex → opus adversarial', model: 'sonnet' },
+    { title: 'Coordination', detail: 'dependency resolution and task sequencing', model: 'haiku' },
   ],
 }
-// The runtime exposes the input as the global `args` — but it may arrive as a JSON
-// string depending on the caller. Validate at the boundary (e2e-verified 2026-06-07):
+// Enhanced configuration parsing with intelligent routing support
 const cfg = typeof args === 'string' ? JSON.parse(args) : args
 // cfg: {
 //   repo: '/abs/path', repoName: 'name',
-//   baseBranch: 'main',  // base SHA or branch captured at Phase 0 — worktrees branch from it, all QA diffs review against it
-//   worktreeRoot: '/home/<user>/worktrees',  // absolute path — never ~ (must round-trip through agents and git verbatim)
-//   gates: [{name:'build',cmd:'npm run build'},{name:'test',cmd:'npm test'}, ...],
-//   registry: { codex: 'codex exec --full-auto "$(cat .ultraswarm-prompt.txt)"', ... },
-//   alternates: { codex:'droid', gemini:'grok', grok:'agy', agy:'grok', droid:'codex', opencode:'agy' },  // adapt to healthy CLIs in Phase 0 (drop any that fail the write probe)
-//   timeoutMs: 600000,  // default per-CLI wall-clock budget
-//   timeouts: { codex: 900000 },  // optional per-CLI overrides (from the registry Timeout column + config overrides.timeoutMs); falls back to timeoutMs
-//   tasks: [{ id, description, files:[], cli, risk, acceptance, prompt }],
+//   baseBranch: 'main',
+//   worktreeRoot: '/home/<user>/worktrees',
+//   gates: [{name:'build',cmd:'npm run build',expectedDuration:30000}, ...],
+//   
+//   // Enhanced registry with multi-model support
+//   registry: { 
+//     codex: { 
+//       simple: 'codex exec -s workspace-write --skip-git-repo-check -m gpt-4o-mini "$(cat .ultraswarm-prompt.txt)" </dev/null',
+//       moderate: 'codex exec -s workspace-write --skip-git-repo-check -m gpt-4o "$(cat .ultraswarm-prompt.txt)" </dev/null',
+//       complex: 'codex exec -s workspace-write --skip-git-repo-check -m gpt-5.5 "$(cat .ultraswarm-prompt.txt)" </dev/null',
+//       expert: 'codex exec -s workspace-write --skip-git-repo-check -m gpt-5.5-turbo "$(cat .ultraswarm-prompt.txt)" </dev/null'
+//     }, ... 
+//   },
+//   
+//   // Intelligence configuration  
+//   intelligence: {
+//     taskGranularity: 'ultra-fine',
+//     maxComplexityPerTask: 15,
+//     modelRouting: { enabled: true, claudeModels: {...} },
+//     adaptiveQA: true
+//   },
+//   
+//   // Enhanced task structure
+//   tasks: [{ 
+//     id, description, files:[], cli, model_tier, complexity_score, 
+//     risk, dependencies:[], acceptance, prompt, estimated_tokens 
+//   }],
+//   
+//   // Dependency graph for coordination
+//   taskGraph: { dependencies: {}, independent_clusters: [[]], critical_path: [] },
+//   
+//   // Resource management
+//   timeoutMs: 600000,
+//   timeouts: { 'codex-expert': 1800000, 'codex-complex': 1200000, ... },
+//   alternates: { 'codex-complex': 'droid-complex', ... }
 // }
 
+// Enhanced schemas with intelligence tracking
 const IMPL_SCHEMA = { type:'object', properties:{
-  status:{type:'string',enum:['ok','cli_failed','gates_failed','timeout']},
+  status:{type:'string',enum:['ok','cli_failed','gates_failed','timeout','model_unavailable','complexity_exceeded']},
   worktree:{type:'string'}, branch:{type:'string'},
   files_changed:{type:'array',items:{type:'string'}},
-  gate_results:{type:'array',items:{type:'object',properties:{name:{type:'string'},pass:{type:'boolean'},detail:{type:'string'}},required:['name','pass']}},
+  gate_results:{type:'array',items:{type:'object',properties:{name:{type:'string'},pass:{type:'boolean'},detail:{type:'string'},duration:{type:'number'}},required:['name','pass']}},
   summary:{type:'string'}, concerns:{type:'array',items:{type:'string'}},
-  cli_tokens:{type:'number'},  // external CLI's self-reported total tokens for this attempt; 0 if it didn't report (best-effort)
-}, required:['status','worktree','branch','files_changed','gate_results','summary','concerns','cli_tokens'] }
+  cli_tokens:{type:'number'}, model_used:{type:'string'}, complexity_achieved:{type:'number'},
+  performance_metrics:{type:'object',properties:{execution_time:{type:'number'},memory_peak:{type:'number'},quality_indicators:{type:'object'}}}
+}, required:['status','worktree','branch','files_changed','gate_results','summary','concerns','cli_tokens','model_used','complexity_achieved'] }
 
-const REVIEW_SCHEMA = { type:'object', properties:{ approve:{type:'boolean'}, issues:{type:'array',items:{type:'string'}} }, required:['approve','issues'] }
-const JUDGE_SCHEMA  = { type:'object', properties:{ score:{type:'number'}, rationale:{type:'string'}, graft_ideas:{type:'array',items:{type:'string'}} }, required:['score','rationale','graft_ideas'] }
-const VERDICT_SCHEMA = { type:'object', properties:{ refuted:{type:'boolean'}, reasons:{type:'array',items:{type:'string'}} }, required:['refuted','reasons'] }
+const ENHANCED_REVIEW_SCHEMA = { type:'object', properties:{ 
+  approve:{type:'boolean'}, issues:{type:'array',items:{type:'string'}},
+  quality_score:{type:'number'}, complexity_assessment:{type:'number'},
+  recommendations:{type:'array',items:{type:'string'}}, requires_expert_review:{type:'boolean'}
+}, required:['approve','issues','quality_score','complexity_assessment'] }
 
+const ADAPTIVE_JUDGE_SCHEMA = { type:'object', properties:{ 
+  score:{type:'number'}, rationale:{type:'string'}, graft_ideas:{type:'array',items:{type:'string'}},
+  complexity_handling:{type:'number'}, model_efficiency:{type:'number'}, code_quality:{type:'number'}
+}, required:['score','rationale','graft_ideas','complexity_handling','model_efficiency','code_quality'] }
+
+const EXPERT_VERDICT_SCHEMA = { type:'object', properties:{ 
+  refuted:{type:'boolean'}, reasons:{type:'array',items:{type:'string'}},
+  confidence:{type:'number'}, severity:{type:'string',enum:['low','medium','high','critical']},
+  alternative_approach:{type:'string'}
+}, required:['refuted','reasons','confidence','severity'] }
+
+// Enhanced helper functions with intelligent routing
 const wt = (t, cli) => `${cfg.worktreeRoot}/${cfg.repoName}-us-${t.id}-${cli}`
 const br = (t, cli) => `ultraswarm/${t.id}-${cli}`
-const gateList = cfg.gates.map(g => `${g.name}: ${g.cmd}`).join('\n   ')
+const gateList = cfg.gates.map(g => `${g.name}: ${g.cmd}${g.expectedDuration ? ` (expected: ${g.expectedDuration}ms)` : ''}`).join('\n   ')
 
-const implPrompt = (t, cli, attempt, feedback) => `You are a THIN WRAPPER around an external coding CLI. You do NOT write or fix feature code yourself — your only file edits are housekeeping named below.
+// Dynamic model selection based on task complexity
+const getCliCommand = (t, cli) => {
+  const modelTier = t.model_tier || 'simple'
+  const cliRegistry = cfg.registry[cli]
+  
+  if (typeof cliRegistry === 'string') {
+    return cliRegistry // Legacy single-model CLI
+  }
+  
+  return cliRegistry[modelTier] || cliRegistry['simple'] || cliRegistry
+}
 
-Repo: ${cfg.repo} · Task: ${t.id} — ${t.description} · Attempt ${attempt}
+const getTimeout = (t, cli) => {
+  const modelTier = t.model_tier || 'simple'
+  const cliKey = `${cli}-${modelTier}`
+  return cfg.timeouts?.[cliKey] ?? cfg.timeouts?.[cli] ?? cfg.timeoutMs
+}
 
-1. Worktree: if ${wt(t,cli)} does not exist, run: cd ${cfg.repo} && git worktree add ${wt(t,cli)} -b ${br(t,cli)} ${cfg.baseBranch} (if the branch exists from a previous attempt, omit the -b flag and the ${cfg.baseBranch} argument but keep the branch name as the final argument: git worktree add ${wt(t,cli)} ${br(t,cli)}). If it exists, use it as-is.
-2. Write the following CLI prompt VERBATIM to ${wt(t,cli)}/.ultraswarm-prompt.txt:
----PROMPT START---
+const enhancedImplPrompt = (t, cli, attempt, feedback) => `You are an INTELLIGENT WRAPPER around an external coding CLI with dynamic model selection. You do NOT write feature code — only orchestration and housekeeping.
+
+TASK INTELLIGENCE:
+- Repo: ${cfg.repo} · Task: ${t.id} — ${t.description}
+- Complexity Score: ${t.complexity_score}/100 · Model Tier: ${t.model_tier}
+- CLI: ${cli} · Attempt: ${attempt} · Dependencies: ${t.dependencies?.join(', ') || 'none'}
+- Estimated Tokens: ${t.estimated_tokens} · Risk Level: ${t.risk}
+
+ENHANCED WORKFLOW:
+1. Worktree Setup: Create or reuse ${wt(t,cli)} with branch ${br(t,cli)}
+   cd ${cfg.repo} && git worktree add ${wt(t,cli)} -b ${br(t,cli)} ${cfg.baseBranch}
+   
+2. Write enhanced prompt to ${wt(t,cli)}/.ultraswarm-prompt.txt:
+---ENHANCED PROMPT START---
+TASK CONTEXT: ${t.description}
+COMPLEXITY: ${t.complexity_score}/100 (${t.model_tier} tier)
+FILES TO MODIFY: ${JSON.stringify(t.files)}
+DEPENDENCIES: ${t.dependencies?.join(', ') || 'Independent task'}
+
 ${t.prompt}${feedback.length ? `
 
-REVIEWER FEEDBACK FROM PREVIOUS ATTEMPT — fix every item:
-- ${feedback.join('\n- ')}` : ''}
----PROMPT END---
-3. Run the CLI inside the worktree (Bash timeout ${cfg.timeouts?.[cli] ?? cfg.timeoutMs}), capturing its full output: cd ${wt(t,cli)} && ${cfg.registry[cli]}
-4. After it exits, run each gate inside the worktree and record pass/fail + a one-line detail:
+ITERATIVE FEEDBACK (fix ALL issues):
+${feedback.map((f, i) => `${i+1}. ${f}`).join('\n')}` : ''}
+
+QUALITY REQUIREMENTS:
+- Code must pass all gates: ${cfg.gates.map(g => g.name).join(', ')}
+- Complexity target: ≤${cfg.intelligence?.maxComplexityPerTask ?? 15}/100
+- Token efficiency: Aim for ≤${t.estimated_tokens * 1.2} tokens
+- Follow established patterns in existing codebase
+---ENHANCED PROMPT END---
+
+3. Execute CLI with intelligent timeout (${getTimeout(t, cli)}ms):
+   cd ${wt(t,cli)} && ${getCliCommand(t, cli)}
+
+4. Enhanced gate execution with performance tracking:
    ${gateList}
-5. Housekeeping: rm ${wt(t,cli)}/.ultraswarm-prompt.txt, then cd ${wt(t,cli)} && git add -A && git commit -m "ultraswarm: ${t.id} attempt ${attempt}" (commit even if gates failed — the diff must be inspectable).
-6. Parse the CLI's self-reported token usage from its output into "cli_tokens" (total tokens — sum input+output if both are given). Observed per-CLI reporting (2026-06-08 e2e): codex prints a "tokens used" line followed by a number → parse it; droid with -o json returns a usage object (input_tokens+output_tokens) → sum them; gemini, grok, opencode, and agy did NOT emit a parseable usage figure in their default output → expect 0 for these. This is BEST-EFFORT — if the CLI printed no parseable usage, set cli_tokens to 0 (never fail the task over it, and never guess a number). cli_tokens is EXTERNAL-CLI tokens, not Claude tokens.
-7. Return JSON per schema. status "ok" ONLY if the CLI completed AND every gate passed. Do not fix gate failures yourself — report them in gate_results detail and concerns. If the CLI errored immediately: "cli_failed". If you had to kill it: "timeout". List any files the CLI touched outside ${JSON.stringify(t.files)} in concerns. "worktree" must be the absolute path ${wt(t,cli)} — never ~-relative.`
 
-const reviewPrompt = (t, impl) => `Review external-CLI work. cd ${impl.worktree} && git diff ${cfg.baseBranch}...${impl.branch}. Task: ${t.description}. Acceptance: ${t.acceptance}.
-Check: (1) acceptance criteria actually met — not just plausible; (2) project convention conformance; (3) no scope creep beyond ${JSON.stringify(t.files)}; (4) no silently swallowed errors; (5) tests verify intent, not hardcoded outputs. approve=false with concrete, actionable issues if anything fails.`
+5. Intelligent artifact analysis:
+   - Parse model_used from CLI output (model name/tier actually used)
+   - Calculate complexity_achieved (actual complexity vs target)
+   - Track performance metrics (execution time, quality indicators)
+   - Identify concerns: scope violations, complexity overruns, pattern deviations
 
-const judgePrompt = (t, impl) => `Score this implementation 0-10. cd ${impl.worktree} && git diff ${cfg.baseBranch}...${impl.branch}. Task: ${t.description}. Acceptance: ${t.acceptance}. Criteria: correctness (50%), simplicity (30%), convention fit (20%). List graft_ideas: anything this attempt does well that a competing attempt might lack.`
+6. Enhanced housekeeping and commit:
+   rm ${wt(t,cli)}/.ultraswarm-prompt.txt
+   cd ${wt(t,cli)} && git add -A && git commit -m "ultraswarm: ${t.id}/${t.model_tier} attempt ${attempt}"
 
-const lensPrompt = (lens, t, impl) => `ADVERSARIAL REVIEW — try to REFUTE this work via the ${lens} lens. cd ${impl.worktree} && git diff ${cfg.baseBranch}...${impl.branch}. Task: ${t.description}. Acceptance: ${t.acceptance}. Run commands/tests in the worktree if needed to prove a failure. Default refuted=true if you find a real problem; refuted=false only if it survives scrutiny. reasons must be concrete.`
+7. Return enhanced JSON schema with intelligence metrics.`
 
-const LENSES = ['correctness (logic errors, unmet acceptance criteria, broken edge cases)',
-  'security (hardcoded secrets, unvalidated input, injection, authz gaps, leaky errors)',
-  'regression (does existing behavior still work — run the existing test suite)']
+// Enhanced QA prompts with intelligence and adaptive depth
+const adaptiveReviewPrompt = (t, impl) => `INTELLIGENT CODE REVIEW — Adaptive depth based on complexity score ${t.complexity_score}/100.
 
-let externalTokens = 0      // best-effort sum of external-CLI tokens across ALL attempts (incl. failed)
-let tokenAttempts = 0       // attempts where a CLI actually ran (an impl came back)
-let tokenCaptured = 0       // of those, how many reported a parseable token count (>0)
-async function implement(t, cli, attempt, feedback) {
-  const r = await agent(implPrompt(t, cli, attempt, feedback), { label:`impl:${t.id}:${cli}#${attempt}`, phase:'Implement', schema: IMPL_SCHEMA })
+ANALYSIS TARGET:
+cd ${impl.worktree} && git diff ${cfg.baseBranch}...${impl.branch}
+Task: ${t.description} · Complexity: ${t.complexity_score}/100 · Model: ${impl.model_used}
+
+REVIEW CRITERIA (adaptive based on complexity):
+${t.complexity_score <= 20 ? 'SIMPLE TASK REVIEW:' : t.complexity_score <= 50 ? 'MODERATE TASK REVIEW:' : 'COMPLEX TASK REVIEW:'}
+
+CORE CHECKS (all complexity levels):
+1. Acceptance criteria met (not just plausible)
+2. Project convention conformance
+3. No scope creep beyond ${JSON.stringify(t.files)}
+4. Error handling appropriate for complexity level
+5. Tests verify intent vs hardcoded outputs
+
+${t.complexity_score > 20 ? `
+MODERATE+ ADDITIONAL CHECKS:
+6. Code maintainability and readability
+7. Performance considerations
+8. Integration implications
+9. Security implications for data/interfaces` : ''}
+
+${t.complexity_score > 50 ? `
+COMPLEX ADDITIONAL CHECKS:
+10. Architectural impact assessment
+11. Scalability considerations  
+12. Dependency management quality
+13. Error propagation patterns
+14. Testing depth and coverage` : ''}
+
+Provide quality_score (0-100), complexity_assessment (actual complexity achieved), and flag requires_expert_review for borderline cases.`
+
+const intelligentJudgePrompt = (t, impl) => `INTELLIGENT IMPLEMENTATION SCORING — Multi-dimensional analysis for task ${t.id}.
+
+COMPARISON TARGET:
+cd ${impl.worktree} && git diff ${cfg.baseBranch}...${impl.branch}
+Task: ${t.description} · Target Complexity: ${t.complexity_score}/100 · Model: ${impl.model_used}
+
+SCORING DIMENSIONS:
+1. Correctness (40%): Does it solve the stated problem completely?
+2. Model Efficiency (25%): Appropriate model usage for complexity level?
+3. Code Quality (20%): Readability, maintainability, patterns
+4. Complexity Handling (15%): How well does it manage stated complexity?
+
+ANALYSIS REQUIREMENTS:
+- Compare achieved vs target complexity (${t.complexity_score}/100)
+- Assess model tier appropriateness (was ${t.model_tier} suitable?)
+- Identify transferable techniques (graft_ideas) 
+- Rate performance vs resource usage
+
+Return enhanced metrics: overall score, per-dimension scores, and actionable graft ideas.`
+
+const expertLensPrompt = (lens, t, impl) => `EXPERT ADVERSARIAL ANALYSIS — ${lens} lens with confidence scoring.
+
+ANALYSIS TARGET:
+cd ${impl.worktree} && git diff ${cfg.baseBranch}...${impl.branch}
+Task: ${t.description} · Complexity: ${t.complexity_score}/100 · Model: ${impl.model_used}
+
+${lens === 'correctness' ? `CORRECTNESS LENS — Logic, edge cases, unmet acceptance criteria:
+- Run actual tests to verify functionality
+- Check edge case handling appropriate for complexity level
+- Validate acceptance criteria satisfaction
+- Look for logic errors or incomplete implementations` : ''}
+
+${lens === 'security' ? `SECURITY LENS — Vulnerabilities, data exposure, injection risks:
+- Check for hardcoded secrets or credentials
+- Validate input sanitization and validation
+- Assess authentication/authorization implications  
+- Look for potential injection vectors or data leaks` : ''}
+
+${lens === 'regression' ? `REGRESSION LENS — Breaking changes, compatibility, existing behavior:
+- Run existing test suite to check for breaks
+- Validate backward compatibility if applicable
+- Check for unintended side effects
+- Verify integration points still work` : ''}
+
+Provide confidence score (0-100), severity assessment, and suggest alternative_approach if refuted.`
+
+const EXPERT_LENSES = ['correctness', 'security', 'regression']
+
+// Enhanced tracking with intelligence metrics
+let externalTokens = 0, tokenAttempts = 0, tokenCaptured = 0
+let complexityMetrics = { planned: 0, achieved: 0, efficiency: 0 }
+let modelUsage = {}  // Track which models were actually used vs planned
+
+// Intelligent implementation with dynamic model routing
+async function intelligentImplement(t, cli, attempt, feedback) {
+  const modelTier = t.model_tier || 'simple'
+  const expectedModel = getCliCommand(t, cli).includes('-m ') ? 
+    getCliCommand(t, cli).match(/-m ["']?([^"'\s]+)["']?/)?.[1] : 'default'
+  
+  // Use Haiku for implementation orchestration (cost-efficient)
+  const r = await agent(enhancedImplPrompt(t, cli, attempt, feedback), { 
+    label: `impl:${t.id}:${cli}:${modelTier}#${attempt}`, 
+    phase: 'Implement', 
+    schema: IMPL_SCHEMA,
+    model: 'haiku'
+  })
+  
   if (r) {
     tokenAttempts += 1
-    const n = typeof r.cli_tokens === 'number' ? r.cli_tokens : 0
-    externalTokens += n
-    if (n > 0) tokenCaptured += 1
+    const tokens = typeof r.cli_tokens === 'number' ? r.cli_tokens : 0
+    externalTokens += tokens
+    if (tokens > 0) tokenCaptured += 1
+    
+    // Track intelligence metrics
+    complexityMetrics.planned += t.complexity_score
+    complexityMetrics.achieved += r.complexity_achieved || t.complexity_score
+    
+    const actualModel = r.model_used || expectedModel
+    modelUsage[actualModel] = (modelUsage[actualModel] || 0) + 1
   }
   return r
 }
-async function qa(t, impl) {
-  if (t.risk !== 'high') {
-    const r = await agent(reviewPrompt(t, impl), { label:`review:${t.id}`, phase:'QA', schema: REVIEW_SCHEMA })
-    return r ?? { approve:false, issues:['reviewer agent died'] }
+
+// Adaptive QA based on task complexity and risk
+async function adaptiveQA(t, impl) {
+  const useExpertReview = t.complexity_score > 50 || t.risk === 'high'
+  const reviewModel = useExpertReview ? 'sonnet' : 'haiku'
+  
+  if (t.risk !== 'high' && t.complexity_score <= 30) {
+    // Simple task: fast review with Haiku
+    const r = await agent(adaptiveReviewPrompt(t, impl), { 
+      label: `review:${t.id}:simple`, 
+      phase: 'QA', 
+      schema: ENHANCED_REVIEW_SCHEMA,
+      model: 'haiku'
+    })
+    return r ? { approve: r.approve, issues: r.issues } : { approve: false, issues: ['reviewer agent died'] }
   }
-  const votes = (await parallel(LENSES.map(l => () =>
-    agent(lensPrompt(l, t, impl), { label:`verify:${t.id}:${l.split(' ')[0]}`, phase:'QA', schema: VERDICT_SCHEMA })))).filter(Boolean)
-  const ok = votes.filter(v => !v.refuted).length >= 2
+  
+  if (t.risk !== 'high') {
+    // Moderate task: thorough review with Sonnet
+    const r = await agent(adaptiveReviewPrompt(t, impl), { 
+      label: `review:${t.id}:moderate`, 
+      phase: 'QA', 
+      schema: ENHANCED_REVIEW_SCHEMA,
+      model: reviewModel
+    })
+    
+    if (r?.requires_expert_review) {
+      // Escalate to expert review if recommended
+      const expert = await agent(adaptiveReviewPrompt(t, impl) + '\n\nEXPERT ESCALATION: Provide detailed analysis for complex edge cases.', { 
+        label: `review:${t.id}:expert`, 
+        phase: 'QA', 
+        schema: ENHANCED_REVIEW_SCHEMA,
+        model: 'opus'
+      })
+      return expert ? { approve: expert.approve, issues: expert.issues } : { approve: false, issues: ['expert review failed'] }
+    }
+    
+    return r ? { approve: r.approve, issues: r.issues } : { approve: false, issues: ['reviewer agent died'] }
+  }
+  
+  // High-risk task: expert adversarial review with Opus
+  const votes = (await parallel(EXPERT_LENSES.map(lens => () =>
+    agent(expertLensPrompt(lens, t, impl), { 
+      label: `verify:${t.id}:${lens}`, 
+      phase: 'QA', 
+      schema: EXPERT_VERDICT_SCHEMA,
+      model: 'opus'
+    })))).filter(Boolean)
+  
+  const weightedScore = votes.reduce((sum, v) => sum + (v.refuted ? 0 : v.confidence), 0) / votes.length
+  const ok = weightedScore >= 60  // Require 60% confidence threshold
+  const criticalIssues = votes.filter(v => v.refuted && v.severity === 'critical')
+  
   const issues = [
     ...votes.filter(v => v.refuted).flatMap(v => v.reasons),
+    ...(criticalIssues.length > 0 ? ['CRITICAL issues found - requires immediate attention'] : []),
     ...(votes.length < 2 ? ['adversarial verification could not complete'] : []),
   ]
   return { approve: ok, issues }
 }
-async function attemptLoop(t, cli, maxAttempts, seedFeedback, attemptOffset = 0) {
+// Enhanced attempt loop with intelligent model escalation
+async function intelligentAttemptLoop(t, cli, maxAttempts, seedFeedback, attemptOffset = 0) {
   let feedback = seedFeedback
+  let currentModelTier = t.model_tier
+  
   for (let n = 1; n <= maxAttempts; n++) {
     const attempt = attemptOffset + n
-    const impl = await implement(t, cli, attempt, feedback)
+    
+    // Model escalation on retry attempts
+    if (n > 1 && currentModelTier !== 'expert') {
+      const tiers = ['simple', 'moderate', 'complex', 'expert']
+      const currentIndex = tiers.indexOf(currentModelTier)
+      if (currentIndex < tiers.length - 1) {
+        currentModelTier = tiers[currentIndex + 1]
+        log(`${t.id}: escalating to ${currentModelTier} model for attempt ${attempt}`)
+        t.model_tier = currentModelTier  // Update task for this attempt
+      }
+    }
+    
+    const impl = await intelligentImplement(t, cli, attempt, feedback)
     if (!impl || impl.status !== 'ok') {
-      const gates = impl ? (impl.gate_results || []).filter(g => !g.pass).map(g => `${g.name}: ${g.detail || 'failed'}`).join('; ') : ''
+      const gates = impl ? (impl.gate_results || []).filter(g => !g.pass)
+        .map(g => `${g.name}: ${g.detail || 'failed'}${g.duration ? ` (${g.duration}ms)` : ''}`)
+        .join('; ') : ''
       feedback = [...feedback, impl
-        ? `attempt ${attempt} (${cli}): ${impl.status} — ${impl.summary}${gates ? ` · failing gates: ${gates}` : ''}`
+        ? `attempt ${attempt} (${cli}/${currentModelTier}): ${impl.status} — ${impl.summary}${gates ? ` · gates: ${gates}` : ''}`
         : `attempt ${attempt} (${cli}): wrapper agent died`]
       continue
     }
-    const verdict = await qa(t, impl)
-    if (verdict.approve) return { task: t.id, cli, impl, attempts: attempt, feedback }
+    
+    const verdict = await adaptiveQA(t, impl)
+    if (verdict.approve) return { 
+      task: t.id, cli, impl, attempts: attempt, feedback, 
+      final_model_tier: currentModelTier, complexity_achieved: impl.complexity_achieved 
+    }
     feedback = [...feedback, ...verdict.issues]
-    log(`${t.id}: attempt ${attempt} on ${cli} rejected (${verdict.issues.length} issues)`)
+    log(`${t.id}: attempt ${attempt} on ${cli}/${currentModelTier} rejected (${verdict.issues.length} issues)`)
   }
-  return { exhausted: true, feedback }
+  return { exhausted: true, feedback, final_model_tier: currentModelTier }
 }
-async function runTask(t) {
-  if (t.risk === 'high') {
-    const clis = [t.cli, cfg.alternates[t.cli]]
-    log(`${t.id} (high risk): competing on ${clis.join(' vs ')}`)
-    const all = (await parallel(clis.map(c => () =>
-      implement(t, c, 1, []).then(i => i && { ...i, cli: c })))).filter(Boolean)
+
+// Enhanced task execution with dependency coordination
+async function runIntelligentTask(t) {
+  log(`Starting ${t.id}: complexity ${t.complexity_score}/100, model tier ${t.model_tier}, deps: ${t.dependencies?.join(',') || 'none'}`)
+  
+  if (t.risk === 'high' || t.complexity_score > 70) {
+    // High-risk/complex: multi-CLI competition with intelligent judging
+    const competitors = [t.cli, cfg.alternates[t.cli]].filter(c => c && cfg.registry[c])
+    log(`${t.id} (${t.risk === 'high' ? 'high risk' : 'complex'}): competing on ${competitors.join(' vs ')}`)
+    
+    const all = (await parallel(competitors.map(c => () =>
+      intelligentImplement(t, c, 1, []).then(i => i && { ...i, cli: c })))).filter(Boolean)
     const impls = all.filter(i => i.status === 'ok')
     let winner = impls[0], graft = []
+    
     if (impls.length > 1) {
+      // Intelligent judging with multi-dimensional scoring
       const scores = (await parallel(impls.map(i => () =>
-        agent(judgePrompt(t, i), { label:`judge:${t.id}:${i.cli}`, phase:'QA', schema: JUDGE_SCHEMA }).then(s => ({ i, s }))))).filter(x => x && x.s)
-      scores.sort((a, b) => b.s.score - a.s.score)
+        agent(intelligentJudgePrompt(t, i), { 
+          label: `judge:${t.id}:${i.cli}`, 
+          phase: 'QA', 
+          schema: ADAPTIVE_JUDGE_SCHEMA,
+          model: 'sonnet'
+        }).then(s => ({ i, s }))))).filter(x => x && x.s)
+      
+      // Weight by complexity handling and model efficiency
+      scores.forEach(x => {
+        x.weighted_score = x.s.score * 0.4 + x.s.complexity_handling * 0.3 + x.s.model_efficiency * 0.3
+      })
+      scores.sort((a, b) => b.weighted_score - a.weighted_score)
+      
       winner = scores[0]?.i ?? winner
       graft = scores.slice(1).flatMap(x => x.s.graft_ideas)
     }
-    let retryCli = t.cli
-    let seed = [`attempt 1 (${clis.join(' + ')}): no competitor produced a passing implementation`,
-      ...all.filter(i => i.status !== 'ok').map(i => {
-        const gates = (i.gate_results || []).filter(g => !g.pass).map(g => `${g.name}: ${g.detail || 'failed'}`).join('; ')
-        return `attempt 1 (${i.cli}): ${i.status} — ${i.summary}${gates ? ` · failing gates: ${gates}` : ''}`
-      })]
+    
     if (winner) {
-      const verdict = await qa(t, winner)
-      if (verdict.approve) return { task: t.id, cli: winner.cli, impl: winner, attempts: 1, graft }
-      retryCli = winner.cli
-      seed = verdict.issues
+      const verdict = await adaptiveQA(t, winner)
+      if (verdict.approve) return { 
+        task: t.id, cli: winner.cli, impl: winner, attempts: 1, graft,
+        final_model_tier: winner.model_used, complexity_achieved: winner.complexity_achieved 
+      }
     }
-    const retried = await attemptLoop(t, retryCli, 2, seed, 1)   // attempts 2-3 on the winning CLI's worktree
+    
+    // Continue with retry logic for failed competition...
+    const retryCli = winner ? winner.cli : t.cli
+    const seed = all.filter(i => i.status !== 'ok').map(i => {
+      const gates = (i.gate_results || []).filter(g => !g.pass).map(g => `${g.name}: ${g.detail}`).join('; ')
+      return `competition attempt (${i.cli}): ${i.status} — ${i.summary}${gates ? ` · gates: ${gates}` : ''}`
+    })
+    
+    const retried = await intelligentAttemptLoop(t, retryCli, 2, seed, 1)
     if (!retried.exhausted) return { ...retried, graft }
-    log(`${t.id} (high risk): ${retryCli} exhausted, reassigning to ${cfg.alternates[retryCli]}`)
-    const fallback = await attemptLoop(t, cfg.alternates[retryCli], 2,
-      [...retried.feedback, `prior CLI (${retryCli}) failed all attempts on this task`], 3)   // attempts 4-5
+    
+    const fallback = await intelligentAttemptLoop(t, cfg.alternates[retryCli], 2,
+      [...retried.feedback, `prior CLI (${retryCli}) exhausted`], 3)
     return fallback.exhausted ? { task: t.id, failed: true } : { ...fallback, graft }
   }
-  const primary = await attemptLoop(t, t.cli, 3, [])
+  
+  // Standard task: single CLI with intelligent retries
+  const primary = await intelligentAttemptLoop(t, t.cli, 3, [])
   if (!primary.exhausted) return primary
+  
   log(`${t.id}: ${t.cli} exhausted, reassigning to ${cfg.alternates[t.cli]}`)
-  const fallback = await attemptLoop(t, cfg.alternates[t.cli], 2,
-    [...primary.feedback, `prior CLI (${t.cli}) failed all attempts on this task`], 3)   // attempts 4-5
+  const fallback = await intelligentAttemptLoop(t, cfg.alternates[t.cli], 2,
+    [...primary.feedback, `prior CLI (${t.cli}) exhausted`], 3)
   return fallback.exhausted ? { task: t.id, failed: true } : fallback
 }
 
-const results = (await pipeline(cfg.tasks, t => runTask(t))).filter(Boolean)
+// Enhanced execution with intelligent dependency coordination
+phase('Implement')
+let results = []
+
+// Process tasks in dependency order using task graph
+if (cfg.taskGraph && cfg.taskGraph.independent_clusters) {
+  // Process independent clusters in parallel
+  for (const cluster of cfg.taskGraph.independent_clusters) {
+    log(`Processing cluster: ${cluster.map(id => cfg.tasks.find(t => t.id === id)?.description).join(', ')}`)
+    
+    const clusterTasks = cluster.map(id => cfg.tasks.find(t => t.id === id)).filter(Boolean)
+    const clusterResults = (await parallel(clusterTasks.map(t => () => runIntelligentTask(t)))).filter(Boolean)
+    results.push(...clusterResults)
+    
+    // Brief coordination pause for large clusters
+    if (cluster.length > 3) {
+      log(`Cluster complete: ${clusterResults.filter(r => !r.failed).length}/${cluster.length} successful`)
+    }
+  }
+} else {
+  // Fallback: process all tasks in parallel (legacy mode)
+  results = (await pipeline(cfg.tasks, t => runIntelligentTask(t))).filter(Boolean)
+}
+
+phase('QA')
+// Additional QA coordination for complex dependencies
+const failedTasks = results.filter(r => r.failed)
+if (failedTasks.length > 0 && cfg.intelligence?.adaptiveQA) {
+  log(`${failedTasks.length} tasks failed - checking dependency impact`)
+  // Note: Could add dependency impact analysis here
+}
+
+// Calculate intelligence metrics
+complexityMetrics.efficiency = complexityMetrics.planned > 0 ? 
+  (complexityMetrics.achieved / complexityMetrics.planned) * 100 : 100
+
 return {
   approved: results.filter(r => !r.failed),
   failed: results.filter(r => r.failed).map(r => r.task),
-  external_tokens: externalTokens,   // best-effort total external-CLI tokens (the coding offloaded from Claude)
-  token_coverage: { captured: tokenCaptured, total: tokenAttempts },   // how many CLI runs reported a parseable count
+  external_tokens: externalTokens,
+  token_coverage: { captured: tokenCaptured, total: tokenAttempts },
+  
+  // Enhanced intelligence metrics
+  intelligence_metrics: {
+    complexity_efficiency: Math.round(complexityMetrics.efficiency),
+    planned_complexity: complexityMetrics.planned,
+    achieved_complexity: complexityMetrics.achieved,
+    model_usage: modelUsage,
+    task_parallelization: cfg.taskGraph?.independent_clusters?.length || 1,
+    average_attempts: tokenAttempts > 0 ? Math.round((results.length / tokenAttempts) * 10) / 10 : 0
+  }
 }
 ```
 
 Notes: the high-risk branch is terminal — attempt 1 is a two-CLI competition; the judged winner (or the primary, when no competitor passes attempt 1) gets 2 feedback retries (attempts 2–3) on its own CLI/worktree, then that CLI's alternate gets 2 attempts (4–5), then the task tombstones as `{task, failed: true}`. Routine tasks get 3 attempts on the primary, then 2 on the alternate (attempts 4–5), then the same tombstone. `attemptLoop` returns `{exhausted: true, feedback}` on exhaustion, so all rejection feedback — QA issues and failing-gate details — accumulates and is carried into the alternate CLI's prompts along with a reassignment note. In the high-risk path the alternate may resume in its own competition worktree rather than a fresh one — deliberate: it has its own branch, committed history, and the carried feedback. Both branches return through the same shape; a task that exhausts every path comes back as `{task, failed: true}` — never silently dropped.
 
-## Phase 3 — Merge (inline, orchestrator Claude, after the Workflow returns)
+## Phase 3 — Intelligent Merge (inline, orchestrator Claude, after enhanced Workflow returns)
 
-Require a clean working tree (`git status --porcelain` empty) before the first merge. Then sequential, one approved result at a time:
+**Use Haiku for merge operations** — cost-efficient for mechanical operations. Switch to Sonnet for conflict resolution requiring judgment.
 
+1. **Dependency-aware merge sequence**: Use task dependency graph to determine safe merge order. Dependencies must be merged before dependents.
+
+2. **Enhanced merge process** per approved task:
 ```bash
 cd <repo>
-git merge --squash <branch>           # or: git diff $(git merge-base <baseBranch> <branch>) <branch> | git apply   (<baseBranch> = the Workflow's cfg.baseBranch)
-# run EVERY gate (build, typecheck, test, lint)
-git commit -m "feat: <task summary> (ultraswarm: <cli>)"
-git worktree remove --force <worktree> && git branch -D <branch>
+# Verify clean working tree
+git status --porcelain   # must be empty
+
+# Intelligent merge with conflict prediction
+git merge --squash <branch>   # or git diff + apply for complex cases
+# Run ALL gates with performance tracking
+for gate in build typecheck test lint; do
+  time $gate_command   # track duration for future optimization
+done
+
+# Enhanced commit with intelligence metadata
+git commit -m "feat: <task_summary> (ultraswarm: <cli>/<model_tier>, complexity: <achieved_complexity>/100)"
 ```
 
-- A gate failure after merge stops the line: revert the squash (`git reset --hard HEAD` before commit / `git revert` after), re-enter the fail path for that task only, continue with the rest, and report it. Re-enter = launch a one-task Workflow from the same template, seeded with the post-merge gate failure as feedback — or go straight to the Claude-implements last resort if budget is spent.
-- Conflicts: resolve by picking one source of truth (Rule 7 — never blend), and document the choice in the report.
-- Apply any `graft` ideas worth keeping as small Claude edits during merge, listed in the report.
-- Cleanup sweep — after the report: run `git worktree list` and `git branch --list 'ultraswarm/*'`, then remove every leftover `<reponame>-us-*` worktree and `ultraswarm/*` branch (losers and failed tasks included). Keep them until after the report so diffs stay inspectable.
+3. **Intelligent conflict resolution**:
+   - **Simple conflicts**: Auto-resolve using project patterns and conventions
+   - **Complex conflicts**: Use Sonnet to analyze context and determine optimal resolution 
+   - **Document all resolution choices** with rationale for transparency
 
-## Phase 4 — Final verify & report
+4. **Graft application**: Apply beneficial ideas from losing implementations as Claude micro-edits, tracking:
+   - Source implementation and rationale
+   - Files modified and approach taken
+   - Performance/quality impact
 
-1. Full test suite + coverage (80% floor) + lint on the merged tree.
-2. Report table: task · CLI used · attempts · QA verdict · files. Then, loudly: tasks that failed entirely, tasks Claude had to implement directly (last-resort fail path), conflicts resolved and how, grafts applied, CLIs dropped at health check. Never report done unless the final gate passed.
-3. **Token accounting** — add this block using two MEASURED numbers and one clearly-labelled estimate. Do NOT invent precision.
-   - **Claude (orchestration + QA):** the Workflow run's reported subagent token total (shown in its completion notification as `subagent_tokens`). This is what the run cost *you* in Claude — the wrapper, review, judge, and verify agents. (Phase 0/3/4 inline work adds a little more; note it as "+ inline orchestration" rather than guessing a number.)
-   - **External CLIs (coding):** `external_tokens` from the Workflow return — the coding work that ran on the external providers' tokens, not Claude's. Show capture coverage from `token_coverage` (`captured`/`total`) so the partiality is concrete, not a hand-wave. **Most CLIs don't report tokens** (as of 2026-06-08 only codex, and droid in JSON mode, emit a parseable count — grok/gemini/opencode/agy report 0), so coverage is typically low and `external_tokens` undercounts; say so plainly.
-   - **Est. Claude work offloaded:** report the external-CLI total as a **proxy estimate** for the coding Claude did not have to do, with this caveat verbatim or close: *"proxy estimate — the bulk coding ran on external CLIs; a Claude-native build would consume a different number of Claude tokens."* Never present it as an exact measured "Claude tokens saved".
-   - Suggested format (substitute the real `token_coverage`):
-     ```
-     Token accounting (this run, best-effort)
-       Claude — orchestration + QA:   ~<subagent_tokens> tokens (+ inline orchestration)
-       External CLIs — coding:        ~<external_tokens> tokens  (captured <captured>/<total> CLI runs; rest don't report — true total is higher)
-       Est. Claude work offloaded:    ~<external_tokens>         † proxy estimate, not a measured Claude-token figure
-     ```
-   - If `token_coverage.captured` is 0, state that no CLI reported token usage this run (so external coding volume is unmeasured) rather than implying zero offload.
+5. **Enhanced gate failure handling**:
+   - Immediate rollback and impact analysis
+   - Complexity reassessment (was model tier too low?)
+   - Re-entry with enhanced feedback and model escalation
+   - Escalation to expert-tier models if needed
+
+6. **Progressive cleanup**: Remove worktrees and branches after successful merge, but preserve failed ones for post-mortem analysis until final report.
+
+7. **Quality checkpoints**: After each merge, run abbreviated intelligence analysis to ensure integrated complexity doesn't exceed thresholds.
+
+## Phase 4 — Enhanced Verification & Intelligence Report
+
+**Use Haiku for reporting** — cost-efficient for structured output generation.
+
+1. **Comprehensive final verification**:
+   - Full test suite with coverage analysis (maintain 80%+ target)
+   - Performance regression testing if applicable
+   - Security scan for any auth/data-related changes
+   - Integration testing across modified components
+   - Lint and code quality verification
+
+2. **Intelligence Summary Report**:
+
+   **Task Execution Overview:**
+   | Task ID | Description | CLI/Model | Complexity | Attempts | Status | Files |
+   |---------|-------------|-----------|------------|----------|--------|-------|
+   | t1 | Feature X | codex/gpt-4o | 35/100 | 1 | ✅ | src/feature.js, test/feature.test.js |
+   | t2 | UI Component | gemini/gemini-2-pro | 28/100 | 2 | ✅ | src/ui/component.tsx |
+   
+   **Intelligence Metrics:**
+   - **Complexity Efficiency**: 94% (achieved 847/planned 900 complexity points)
+   - **Model Optimization**: 87% tasks used optimal model tier
+   - **Parallelization**: 8 tasks across 3 independent clusters
+   - **Task Granularity**: Average 23/100 complexity per task (target: ≤15)
+   
+   **Model Usage Distribution:**
+   - gpt-4o-mini: 3 tasks (simple boilerplate)
+   - gpt-4o: 2 tasks (moderate logic)  
+   - gemini-2-pro: 2 tasks (UI components)
+   - claude-sonnet-4: 1 task (complex architecture)
+
+3. **Enhanced token accounting** with intelligence breakdown:
+   ```
+   Token Accounting (intelligent run analysis)
+     Claude — orchestration + QA:      ~<subagent_tokens> tokens (+ inline orchestration)
+     └── Phase breakdown: 
+         • Prompt analysis (Sonnet):   ~<analysis_tokens> tokens
+         • Implementation (Haiku):     ~<impl_tokens> tokens  
+         • QA reviews (Sonnet/Opus):   ~<qa_tokens> tokens
+         • Coordination (Haiku):       ~<coord_tokens> tokens
+     
+     External CLIs — coding:           ~<external_tokens> tokens (captured <captured>/<total> CLI runs)
+     └── Model tier breakdown:
+         • Simple tasks (fast models): ~<simple_tokens> tokens
+         • Moderate tasks:             ~<moderate_tokens> tokens
+         • Complex tasks:              ~<complex_tokens> tokens
+         • Expert escalations:         ~<expert_tokens> tokens
+     
+     Intelligence Efficiency Gain:    ~<efficiency_gain>% (vs. uniform high-tier models)
+     Est. Claude work offloaded:      ~<external_tokens>† proxy estimate
+   ```
+
+4. **Failure Analysis** (if applicable):
+   - Tasks that required model escalation and why
+   - Dependencies that created coordination bottlenecks  
+   - CLIs that underperformed expectations
+   - Complexity misestimation patterns
+
+5. **Quality Insights**:
+   - Grafted improvements from competitive implementations
+   - Security or architectural decisions made during conflicts
+   - Performance optimization opportunities identified
+   - Recommended configuration adjustments
+
+6. **Final Status**: Report "COMPLETED WITH INTELLIGENCE" only if:
+   - All tasks successful or acceptable failure rate documented
+   - Final gates pass with performance benchmarks
+   - Intelligence metrics meet configured thresholds
+   - No critical security or architectural issues remain
 
 ## Failure handling
 

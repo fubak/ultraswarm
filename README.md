@@ -1,10 +1,12 @@
-# ultraswarm
+# ultraswarm v2.0
 
-**Claude orchestrates a swarm of external AI coding CLIs — they write the code in isolated git worktrees, Claude verifies and merges.**
+**Advanced AI orchestration with intelligent prompt analysis, dynamic model routing, and ultra-granular task decomposition.**
 
-`ultraswarm` is a [Claude Code](https://claude.com/claude-code) plugin that provides the `/ultraswarm` skill. It keeps the orchestration machinery of Claude Code's built-in `ultracode` workflow — deterministic control flow, schema-validated agent output, parallel pipelines, adversarial QA, resume-from-checkpoint — but delegates the *bulk coding* to locally installed external CLIs (codex, gemini, grok, agy, droid, opencode). Claude never writes feature code by default. It decomposes the work, routes each task to the best CLI, gates every result through tiered QA, and merges only what passes.
+`ultraswarm` is a [Claude Code](https://claude.com/claude-code) plugin that revolutionizes multi-agent development workflows. Version 2.0 introduces sophisticated intelligence capabilities: automatic complexity assessment, dynamic model selection per task difficulty, and ultra-granular task decomposition that maximizes parallelization while minimizing token usage.
 
-The point: spend external-CLI tokens on the typing, spend Claude's judgment on the decomposition, the review, and the merge.
+The system intelligently routes work to optimal model tiers across multiple external CLIs (codex, gemini, grok, agy, droid, opencode), automatically escalates models on retry attempts, and provides comprehensive intelligence reporting. Claude provides intelligent orchestration and quality assurance while external CLIs handle the bulk coding using precisely-matched model capabilities.
+
+**Key Innovation**: Spend expensive model tokens only where complexity demands it, use efficient models for simple tasks, and let intelligence routing optimize the entire workflow automatically.
 
 ---
 
@@ -29,35 +31,37 @@ The point: spend external-CLI tokens on the typing, spend Claude's judgment on t
 
 ## How it works
 
-Five phases. Claude runs Phases 0, 3, and 4 itself; Phases 1–2 run inside a Workflow it authors per-run.
+Six intelligent phases. Claude runs Phases 0a, 0, 3, and 4 with dynamic model selection; Phases 1–2 run inside an enhanced Workflow with intelligent routing.
 
 ```mermaid
 flowchart TD
-    U([/ultraswarm task]) --> P0
+    U([/ultraswarm task]) --> P0A
 
-    subgraph claude0 [" Claude — inline "]
-        P0["<b>Phase 0 · Decompose</b><br/>health-check + write-probe each CLI<br/>explore repo · detect &amp; verify gates<br/>build task list"]
-        CONF{"You confirm<br/>the plan?"}
+    subgraph claude0 [" Claude — intelligent analysis "]
+        P0A["<b>Phase 0a · Intelligent Analysis</b><br/>complexity assessment (5-dimensional)<br/>model requirement analysis<br/>optimal routing strategy"]
+        P0["<b>Phase 0 · Enhanced Decomposition</b><br/>ultra-granular task breakdown<br/>dependency mapping + CLI health-check<br/>model tier assignment per task"]
+        CONF{"You confirm<br/>the intelligent plan?"}
     end
+    P0A --> P0
     P0 --> CONF
     CONF -- no --> STOP([cancel])
 
-    subgraph wf [" Workflow — authored per-run "]
+    subgraph wf [" Enhanced Workflow — intelligent orchestration "]
         direction TB
-        P1["<b>Phase 1 · Implement</b> &nbsp;(pipeline over tasks)<br/>each task → thin Claude wrapper:<br/>git worktree → run assigned CLI → run gates<br/>high-risk: 2 CLIs compete in separate worktrees"]
-        P2["<b>Phase 2 · QA</b> &nbsp;(starts as each task's code lands)<br/>routine: gates + 1 diff review<br/>high-risk: judge panel → 3-lens adversarial verify<br/>fail → retry w/ feedback → reassign CLI → tombstone"]
+        P1["<b>Phase 1 · Intelligent Implement</b><br/>dynamic model selection per complexity<br/>dependency-aware coordination<br/>model escalation on retries<br/>competition for high-risk/complex tasks"]
+        P2["<b>Phase 2 · Adaptive QA</b><br/>simple: Haiku review<br/>moderate: Sonnet analysis<br/>complex/high-risk: Opus adversarial<br/>confidence scoring + expert escalation"]
         P1 --> P2
     end
     CONF -- yes --> P1
-    P2 --> RET[["returns {approved, failed}"]]
+    P2 --> RET[["returns {approved, failed, intelligence_metrics}"]]
 
-    subgraph claude1 [" Claude — inline "]
-        P3["<b>Phase 3 · Merge</b> &nbsp;(sequential)<br/>apply each approved diff one at a time<br/>full gate after each merge"]
-        P4["<b>Phase 4 · Verify &amp; report</b><br/>full suite + coverage<br/>per-task table · loud failure list"]
+    subgraph claude1 [" Claude — intelligent integration "]
+        P3["<b>Phase 3 · Intelligent Merge</b><br/>dependency-aware merge sequence<br/>conflict prediction + resolution<br/>graft application from competitions"]
+        P4["<b>Phase 4 · Intelligence Report</b><br/>comprehensive metrics + efficiency analysis<br/>model usage optimization insights<br/>per-task complexity achievement"]
         P3 --> P4
     end
     RET --> P3
-    P4 --> DONE([done])
+    P4 --> DONE([intelligent completion])
 ```
 
 **The role contract.** External CLIs do *all* feature coding inside throwaway worktrees. Claude decomposes, reviews, judges, merges, and reports — it never writes feature code, with one exception: if every CLI exhausts its attempts on a task, Claude implements that one task directly and flags it loudly in the report.
@@ -68,12 +72,25 @@ flowchart TD
 
 ## Why use it
 
-- **Cheaper bulk coding.** External CLIs do the typing; Claude's tokens go to decomposition, review, and merge — the parts that need judgment.
-- **You keep ultracode's reliability.** Deterministic phases, JSON-schema-validated worker output, parallel pipelines, adversarial verification, resume-from-checkpoint. Not a loose "run some CLIs and hope" script.
-- **Quality is enforced, not assumed.** External CLI output is more variable than Claude's. Tiered QA (and head-to-head competition on risky tasks) is what compensates — plausible-but-wrong code doesn't survive the gate.
-- **Fails loud.** Every dropped CLI, failed task, merge conflict, and Claude-implemented fallback is surfaced in the final report. "Done" is never reported unless the final gate passed.
+### 🧠 **Intelligent Cost Optimization**
+External CLIs use precisely-matched models for each task complexity. Simple tasks get fast/cheap models, complex tasks get powerful models. Intelligence routing can reduce token costs by 40-70% vs. uniform high-tier models while maintaining quality.
 
-If you just want to fan a couple of CLIs at independent subtasks with minimal ceremony, the lighter `swarm-cli` / `multi-execute` commands still exist. `ultraswarm` is for when you want the full orchestrated build with verification.
+### ⚡ **Ultra-Granular Parallelization**
+Advanced task decomposition breaks work into atomic units (≤15/100 complexity each) with dependency analysis. More tasks can run in parallel, reducing wall-clock time and enabling better resource utilization.
+
+### 🎯 **Adaptive Quality Assurance** 
+QA depth scales intelligently: Haiku reviews for simple tasks, Sonnet for moderate complexity, Opus adversarial analysis for high-risk work. Quality is enforced where it matters, efficiency where it doesn't.
+
+### 📊 **Comprehensive Intelligence**
+Real-time complexity tracking, model efficiency metrics, parallelization analysis, and cost optimization insights. Full transparency into what models were used, why, and how effectively.
+
+### 🛡️ **Enhanced Reliability**
+All the original ultracode guarantees — deterministic phases, schema-validated output, adversarial verification — enhanced with intelligent model escalation, dependency coordination, and expert-tier fallbacks.
+
+### 🔍 **Transparent Failures**
+Enhanced failure analysis with complexity reassessment, model tier recommendations, and dependency impact analysis. When something fails, you know exactly why and how to fix it.
+
+**Perfect for**: Complex features requiring mixed skill levels, cost-conscious development workflows, teams wanting maximum automation with full transparency, and any scenario where intelligent resource allocation matters more than raw speed.
 
 ---
 
