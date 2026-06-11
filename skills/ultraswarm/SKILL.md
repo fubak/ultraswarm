@@ -551,7 +551,11 @@ ${lens === 'regression' ? `REGRESSION LENS — Breaking changes, compatibility, 
 - Check for unintended side effects
 - Verify integration points still work` : ''}
 
-Provide confidence score (0-100), severity assessment, and suggest alternative_approach if refuted.`
+VERDICT POLARITY — read carefully:
+- Set refuted=true ONLY if you found a concrete, demonstrable problem with the work. The reasons array must then describe the PROBLEMS you found, nothing else.
+- If the work survives your scrutiny, set refuted=false (reasons may briefly note what you verified).
+- severity describes the worst PROBLEM found; with refuted=false use severity "low".
+Provide confidence (0-100) in your verdict, and suggest alternative_approach only when refuted=true.`
 
 const EXPERT_LENSES = ['correctness', 'security', 'regression']
 const ALLOWED_CLIS = ['codex', 'gemini', 'grok', 'agy', 'droid', 'opencode']
