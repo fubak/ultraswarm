@@ -284,8 +284,8 @@ Advanced interactive configuration builder supporting intelligence features and 
    - Break work into atomic tasks with complexity score ≤ configured `maxComplexityPerTask` (default 15)
    - Each task: `{id, description, files, cli, model_tier, complexity_score, risk, dependencies, acceptance, prompt}`
    - **Model tier assignment**: Route tasks to appropriate complexity tier based on analysis
-   - **Dependency mapping**: Track inter-task dependencies for sequencing
-   - **Parallelization optimization**: Identify truly independent task clusters
+   - **Dependency waves**: Compute topological levels over the `dependencies` edges — wave 1 = tasks with no dependencies, wave N = tasks whose dependencies all sit in earlier waves. A dependency cycle is a decomposition error: stop and re-split the tasks. Tasks within one wave MUST be mutually independent — each wave becomes its own Workflow launch (see "Dependency waves — chaining Workflows" below), because all worktrees in a Workflow branch from the same base SHA, so work from a co-launched predecessor is invisible to its dependents (e2e-verified 2026-06-10).
+   - **Parallelization optimization**: Identify truly independent task clusters *within* each wave
    - **Risk stratification**: Enhanced risk assessment using multiple factors
 
 4. **Intelligent task routing**:
@@ -303,9 +303,24 @@ Advanced interactive configuration builder supporting intelligence features and 
 6. **Present intelligent task plan with model routing table.** Show:
    - Task breakdown with complexity scores and model assignments
    - Estimated token usage per CLI and model tier
-   - Parallelization plan and dependency graph
+   - Dependency waves and the parallelization plan within each wave
    - Risk assessment and competition strategy
-   - Get explicit user confirmation before Workflow launch
+   - Get explicit user confirmation before the first Workflow launch (one confirmation covers the whole wave chain)
+
+## Dependency waves — chaining Workflows
+
+A single Workflow invocation handles ONE wave of mutually independent tasks. Dependent tasks run in later waves, each in its own Workflow, re-based on the merged result of the wave before it. The execution loop (inline, orchestrator Claude):
+
+1. `baseSha` ← current HEAD (captured at Phase 0).
+2. For each wave in order:
+   a. Launch the Workflow template with `tasks` = this wave's tasks and `baseBranch` = `baseSha`. Tasks in the wave run in parallel inside the Workflow as usual.
+   b. When it returns, run **Phase 3 merge** for that wave's approved results (sequential, gate after each merge).
+   c. `baseSha` ← new HEAD. Worktrees for the next wave now fork from a base that contains every merged predecessor.
+3. After the last wave, run Phase 4 once for the whole chain (aggregate the per-wave token accounting).
+
+**Blocked dependents — fail loud, never run blind:** if a task tombstones (or its merge is reverted) and a later-wave task depends on it, do NOT launch the dependent against a base missing its prerequisite. Mark it `blocked (dependency <id> failed)`, skip it, and list it in the Phase 4 report alongside the failed tasks. The user decides whether to re-run the chain after fixing the blocker.
+
+**Why not one Workflow with sequenced clusters:** every worktree branches from the Workflow's single `baseBranch`; QA-approved work lands on per-task branches but is only merged to the real branch by Claude in Phase 3, *after* the Workflow returns. Sequencing clusters inside one Workflow orders execution but cannot re-base dependents — they would build against a tree where their prerequisites don't exist. The Workflow script enforces this with a fail-fast guard (it refuses a `tasks` list containing intra-invocation dependency edges).
 
 ## Phases 1–2 — Enhanced Workflow Script Template
 
@@ -353,7 +368,9 @@ const cfg = typeof args === 'string' ? JSON.parse(args) : args
 //     risk, dependencies:[], acceptance, prompt, estimated_tokens 
 //   }],
 //   
-//   // Dependency graph for coordination
+//   // Optional grouping of tasks WITHIN this wave (all mutually independent — the
+//   // script throws if any task depends on another task in the same invocation;
+//   // dependency chains are split across chained Workflow runs by Phase 0)
 //   taskGraph: { dependencies: {}, independent_clusters: [[]], critical_path: [] },
 //   
 //   // Resource management
@@ -950,13 +967,21 @@ async function runIntelligentTask(t) {
   return await runStandardTask(t)
 }
 
-// Enhanced execution with intelligent dependency coordination
+// GUARD: one Workflow invocation = one dependency wave. All worktrees branch from
+// the same cfg.baseBranch, so a co-launched predecessor's work is INVISIBLE to its
+// dependents — dependency chains must be split across chained Workflow runs, with
+// Phase 3 merging between them (see "Dependency waves — chaining Workflows").
+const taskIds = new Set(cfg.tasks.map(t => t.id))
+const intraDeps = cfg.tasks.filter(t => (t.dependencies || []).some(d => taskIds.has(d)))
+if (intraDeps.length > 0) {
+  throw new Error(`tasks [${intraDeps.map(t => t.id).join(', ')}] depend on tasks in this same Workflow invocation — split dependency waves into chained Workflow runs and merge between waves; worktrees all fork from ${cfg.baseBranch}, so in-flight predecessor work would be invisible to them`)
+}
+
 phase('Implement')
 let results = []
 
-// Process tasks in dependency order using task graph
+// Optional grouping of (mutually independent) tasks into clusters within this wave
 if (cfg.taskGraph && cfg.taskGraph.independent_clusters) {
-  // Process independent clusters in parallel
   for (const cluster of cfg.taskGraph.independent_clusters) {
     log(`Processing cluster: ${cluster.map(id => cfg.tasks.find(t => t.id === id)?.description).join(', ')}`)
     
@@ -1006,7 +1031,7 @@ return {
 
 Notes: the high-risk branch is terminal — attempt 1 is a two-CLI competition; the judged winner (or the primary, when no competitor passes attempt 1) gets 2 feedback retries (attempts 2–3) on its own CLI/worktree, then that CLI's alternate gets 2 attempts (4–5), then the task tombstones as `{task, failed: true}`. Routine tasks get 3 attempts on the primary, then 2 on the alternate (attempts 4–5), then the same tombstone. `attemptLoop` returns `{exhausted: true, feedback}` on exhaustion, so all rejection feedback — QA issues and failing-gate details — accumulates and is carried into the alternate CLI's prompts along with a reassignment note. In the high-risk path the alternate may resume in its own competition worktree rather than a fresh one — deliberate: it has its own branch, committed history, and the carried feedback. Both branches return through the same shape; a task that exhausts every path comes back as `{task, failed: true}` — never silently dropped.
 
-## Phase 3 — Intelligent Merge (inline, orchestrator Claude, after enhanced Workflow returns)
+## Phase 3 — Intelligent Merge (inline, orchestrator Claude, after each wave's Workflow returns)
 
 **Use Haiku for merge operations** — cost-efficient for mechanical operations. Switch to Sonnet for conflict resolution requiring judgment.
 
@@ -1128,5 +1153,7 @@ git commit -m "feat: <task_summary> (ultraswarm: <cli>/<model_tier>, complexity:
 | CLI timeout / crash mid-task | Counts as failed attempt → retry/reassign path |
 | Wrapper agent dies (null) | Same as failed attempt |
 | All CLIs exhausted on a task | Claude implements it directly — flagged in report |
+| Task fails with dependents in later waves | Dependents are blocked, never launched against a base missing their prerequisite — listed as `blocked (dependency <id> failed)` in the report |
+| Dependent tasks passed to one Workflow invocation | Script throws fail-fast before any agent runs — split into chained per-wave Workflows |
 | Merge conflict | Claude resolves, pick-don't-blend, documented |
 | Post-merge gate regression | Revert that merge, fail path for that task, line continues |
