@@ -14,6 +14,9 @@ PLUGIN_JSON="$ROOT/.claude-plugin/plugin.json"
 MARKET_JSON="$ROOT/.claude-plugin/marketplace.json"
 SKILL_MD="$ROOT/skills/ultraswarm/SKILL.md"
 CONFIG_JSON="$ROOT/ultraswarm.config.example.json"
+ROUTER_MJS="$ROOT/scripts/router.mjs"
+ROUTER_TEST="$ROOT/scripts/router.test.mjs"
+ADV_CFG="$ROOT/ultraswarm.config.advanced.json"
 
 fails=0
 pass() { printf '  \xe2\x9c\x93 %s\n' "$1"; }
@@ -165,6 +168,51 @@ else
     pass "frontmatter present with name: and description:"
   else
     fail "frontmatter missing name: or description:"
+  fi
+fi
+
+# --- Check 8: Router module syntax --------------------------------------------
+echo "[8] Router module syntax"
+if [ ! -f "$ROUTER_MJS" ]; then
+  fail "scripts/router.mjs does not exist"
+else
+  if node --check "$ROUTER_MJS" 2>/dev/null; then
+    pass "scripts/router.mjs syntax OK"
+  else
+    fail "scripts/router.mjs failed syntax check"
+  fi
+fi
+
+# --- Check 9: Router test suite -----------------------------------------------
+echo "[9] Router test suite"
+if [ ! -f "$ROUTER_TEST" ]; then
+  fail "scripts/router.test.mjs does not exist"
+else
+  if node --test "$ROUTER_TEST" >/dev/null 2>&1; then
+    pass "scripts/router.test.mjs tests passed"
+  else
+    fail "scripts/router.test.mjs tests failed"
+  fi
+fi
+
+# --- Check 10: Advanced config validates --------------------------------------
+echo "[10] Advanced config validates"
+if [ ! -f "$ADV_CFG" ]; then
+  fail "ultraswarm.config.advanced.json does not exist"
+elif [ ! -f "$ROUTER_MJS" ]; then
+  fail "scripts/router.mjs does not exist (needed for config validation)"
+else
+  if node -e '
+Promise.all([import(process.argv[1]), import("node:fs")]).then(([m, fs]) => {
+  const cfg = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+  const v = m.validateConfig(cfg);
+  if (!v.valid) { console.error(v.errors.join("; ")); process.exit(1); }
+  process.exit(0);
+});
+' "$ROUTER_MJS" "$ADV_CFG" 2>/dev/null; then
+    pass "ultraswarm.config.advanced.json passes validateConfig"
+  else
+    fail "ultraswarm.config.advanced.json failed validateConfig"
   fi
 fi
 
