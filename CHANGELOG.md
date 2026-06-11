@@ -4,6 +4,24 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Workflow behavior harness** (`scripts/workflow-harness.test.mjs`): 16
+  node:test cases running the actual Workflow JS extracted from SKILL.md with
+  mocked agent primitives — tier routing, adaptive QA depths, quorum/critical
+  rules, escalation, exhaustion, immutability, and the dependency-wave guard.
+  CI check [11] runs it on every push, so the embedded orchestration logic is
+  behaviorally tested, not just parse-checked.
+- **`validate.sh --json`** (built by the swarm: grok/grok-composer-2.5-fast,
+  2 attempts — QA caught unescaped `node -e` interpolation and newline-unsafe
+  JSON escaping on attempt 1): emits per-check results as a JSON array of
+  `{check, name, pass, detail}`; default output and exit codes unchanged.
+- README rewritten for v2.1 reality: dependency waves, tiered+flat override
+  forms, adaptive QA with quorum/critical rules, verified model-tier table,
+  measured cost calibration, `analyze` mode, and the invalid-model-ID
+  troubleshooting entry.
+
 ## [2.1.0] — 2026-06-11
 
 A hardening + validation release driven by a full live end-to-end test of the

@@ -1,12 +1,12 @@
-# ultraswarm v2.0
+# ultraswarm
 
-**Advanced AI orchestration with intelligent prompt analysis, dynamic model routing, and ultra-granular task decomposition.**
+**Intelligent orchestration of external AI coding CLIs — complexity-routed models, isolated git worktrees, adversarial QA, Claude-only merge.**
 
-`ultraswarm` is a [Claude Code](https://claude.com/claude-code) plugin that revolutionizes multi-agent development workflows. Version 2.0 introduces sophisticated intelligence capabilities: automatic complexity assessment, dynamic model selection per task difficulty, and ultra-granular task decomposition that maximizes parallelization while minimizing token usage.
+`ultraswarm` is a [Claude Code](https://claude.com/claude-code) plugin providing the `/ultraswarm` skill. Claude analyzes your task's complexity, decomposes it into atomic units, and routes each to the best external CLI (codex, gemini, grok, agy, droid, opencode) *and* the right model tier within that CLI — fast/cheap models for simple work, powerful models for complex work, with automatic escalation when an attempt fails QA. Dependent tasks run as chained Workflow waves, each re-based on the merged result of the wave before it. Claude never writes feature code; it decomposes, reviews, judges, merges, and reports.
 
-The system intelligently routes work to optimal model tiers across multiple external CLIs (codex, gemini, grok, agy, droid, opencode), automatically escalates models on retry attempts, and provides comprehensive intelligence reporting. Claude provides intelligent orchestration and quality assurance while external CLIs handle the bulk coding using precisely-matched model capabilities.
+As of v2.1 the full pipeline is **live-validated end-to-end**: competition + judge panel + 3-lens adversarial QA, model escalation, dependency waves, and resume-from-checkpoint have all been exercised on real multi-task runs (the swarm built this repo's own config validator as its test workload).
 
-**Key Innovation**: Spend expensive model tokens only where complexity demands it, use efficient models for simple tasks, and let intelligence routing optimize the entire workflow automatically.
+**The point**: spend expensive model tokens only where complexity demands them, spend external-CLI tokens on the typing, and spend Claude's judgment on decomposition, review, and merge.
 
 ---
 
@@ -39,7 +39,7 @@ flowchart TD
 
     subgraph claude0 [" Claude — intelligent analysis "]
         P0A["<b>Phase 0a · Intelligent Analysis</b><br/>complexity assessment (5-dimensional)<br/>model requirement analysis<br/>optimal routing strategy"]
-        P0["<b>Phase 0 · Enhanced Decomposition</b><br/>ultra-granular task breakdown<br/>dependency mapping + CLI health-check<br/>model tier assignment per task"]
+        P0["<b>Phase 0 · Enhanced Decomposition</b><br/>ultra-granular task breakdown<br/>dependency waves + CLI health-check<br/>model tier assignment per task"]
         CONF{"You confirm<br/>the intelligent plan?"}
     end
     P0A --> P0
@@ -68,12 +68,14 @@ flowchart TD
 
 **Isolation.** Every task attempt runs in its own `git worktree` on its own branch, so a bad CLI run can't corrupt your working tree or another task's work. Nothing touches your real branch until Phase 3 — and only approved, gate-passing diffs, merged one at a time.
 
+**Dependency waves.** Tasks within one Workflow must be mutually independent, because all its worktrees fork the same base SHA. When tasks depend on each other, Phase 0 computes topological *waves* and runs each wave as its own Workflow, re-based on the merged result of the wave before it — so dependents always build on their actual prerequisites. The Workflow script refuses (fail-fast) a task list containing intra-invocation dependency edges, and a failed task blocks its later-wave dependents loudly instead of letting them run blind.
+
 ---
 
 ## Why use it
 
 ### 🧠 **Intelligent Cost Optimization**
-External CLIs use precisely-matched models for each task complexity. Simple tasks get fast/cheap models, complex tasks get powerful models. Intelligence routing can reduce token costs by 40-70% vs. uniform high-tier models while maintaining quality.
+External CLIs use precisely-matched models for each task complexity. Simple tasks get fast/cheap models, complex tasks get powerful models, and retries escalate the tier instead of repeating the same mistake at the same capability. Measured in the live validation: routine simple-tier tasks cost ~70–80k Claude orchestration tokens and finish in ~7 minutes; only the tasks that genuinely need the high-risk path pay its ~4–7× premium.
 
 ### ⚡ **Ultra-Granular Parallelization**
 Advanced task decomposition breaks work into atomic units (≤15/100 complexity each) with dependency analysis. More tasks can run in parallel, reducing wall-clock time and enabling better resource utilization.
@@ -166,6 +168,16 @@ Examples:
 /ultraswarm build the settings page: form component, validation, and the PATCH endpoint
 ```
 
+Two other modes:
+
+```
+/ultraswarm analyze <task>   # Phase 0a only: complexity assessment + recommended
+                             # routing/cost estimate — nothing launches (~free)
+/ultraswarm config           # interactive roster + model-tier configuration builder
+```
+
+`analyze` is the cheap way to preview what a run would look like before paying for one.
+
 **What happens next:**
 
 1. **Claude decomposes** your request into independent tasks, picks a CLI for each by specialty, classifies each as `routine` or `high` risk, and detects your repo's gate commands (build / test / lint).
@@ -199,35 +211,46 @@ Two locations, **project overrides global**:
 
 ```json
 {
-  "enabled": ["codex", "grok", "agy"],
+  "enabled": ["codex", "grok", "opencode"],
   "overrides": {
     "codex": { "timeoutMs": 900000 },
-    "opencode": { "invocation": "opencode run --agent build -m \"xai/grok-4.3\" \"$(cat .ultraswarm-prompt.txt)\"" }
+    "grok":  { "invocation": "grok --always-approve -m grok-build -p \"$(cat .ultraswarm-prompt.txt)\"" },
+    "opencode": {
+      "models": {
+        "simple":   { "model": "xai/grok-build-0.1", "invocation": "opencode run --agent build -m \"xai/grok-build-0.1\" \"$(cat .ultraswarm-prompt.txt)\"" },
+        "moderate": { "model": "xai/grok-4.3",       "invocation": "opencode run --agent build -m \"xai/grok-4.3\" \"$(cat .ultraswarm-prompt.txt)\"" }
+      }
+    }
   }
 }
 ```
 
 - **`enabled`** — allowlist of registry CLI names the swarm may use. Omit it to mean "all installed CLIs." (An empty list is treated as a mistake, not "disable everything.")
-- **`overrides`** — optional per-CLI tweaks merged onto the built-in registry row: `invocation`, `timeoutMs`, `specialty`, `alternate`.
+- **`overrides`** — optional per-CLI tweaks merged onto the built-in registry row. Two forms, both supported:
+  - **Flat** (one model for all complexity tiers): `invocation`, `timeoutMs`, `specialty`, `alternate`.
+  - **Tiered** (`models.{simple|moderate|complex|expert}`): a `{model, invocation}` pair per complexity tier. A `models` block must include at least the `simple` tier — it's the fallback when a tier isn't configured.
+- An optional **`intelligence`** block tunes complexity thresholds, task granularity, and which Claude model handles each orchestration phase — see [`ultraswarm.config.advanced.json`](ultraswarm.config.advanced.json) for the full annotated example with model IDs **verified against the real CLIs** (model IDs drift; an invalid ID does *not* fail fast, so the shipped example matters).
 
-A starter template is in [`ultraswarm.config.example.json`](ultraswarm.config.example.json). Whatever you enable, Phase 0 still health-checks and write-probes each CLI and drops any that aren't actually working — telling you which and why. The swarm needs **at least two** working CLIs to run.
+Starter templates: [`ultraswarm.config.example.json`](ultraswarm.config.example.json) (minimal) and [`ultraswarm.config.advanced.json`](ultraswarm.config.advanced.json) (full intelligence config). Whatever you enable, Phase 0 still health-checks and write-probes each CLI and drops any that aren't actually working — telling you which and why. The swarm needs **at least two** working CLIs to run. Configs are validated by [`scripts/router.mjs`](scripts/router.mjs)'s `validateConfig` (CI runs it against the shipped example on every push).
 
 ---
 
 ## The worker registry
 
-Tasks are routed to CLIs by specialty:
+Tasks are routed to CLIs by specialty, then to a **model tier within that CLI** by complexity score (simple ≤20 · moderate ≤50 · complex ≤100 · expert >100):
 
-| CLI | Specialty | Status |
-|---|---|---|
-| **codex** | Backend, logic, algorithms, debugging | ✅ verified end-to-end (slow, ~5 min/task) |
-| **gemini** | Frontend, UI, CSS, components | ✅ verified |
-| **grok** | Tests, refactors, general | ✅ verified end-to-end |
-| **agy** | Docs, boilerplate, general | ✅ verified end-to-end |
-| **droid** | General full-stack implementation, refactoring | ✅ enabled (needs a Factory subscription; help-verified) |
-| **opencode** | Junior tier: boilerplate, lint/type fixes, simple tests, JSDoc | ✅ verified |
+| CLI | Specialty | Model tiers (verified 2026-06-10/11) | Status |
+|---|---|---|---|
+| **codex** | Backend, logic, algorithms, debugging | gpt-5.4-mini → gpt-5.4 → gpt-5.5 | ✅ live-verified v2.1 e2e (slow, ~5+ min/task) |
+| **gemini** | Frontend, UI, CSS, components | gemini-2.5-flash → gemini-2.5-pro | ✅ verified |
+| **grok** | Tests, refactors, general | grok-build → grok-composer-2.5-fast | ✅ live-verified v2.1 e2e |
+| **agy** | Docs, boilerplate, general | gemini-2.5-flash → gemini-2.5-pro | ✅ verified |
+| **droid** | General full-stack implementation, refactoring | claude-haiku-4-5 → claude-opus-4-8 | ✅ enabled (needs a Factory subscription; help-verified) |
+| **opencode** | Junior tier: boilerplate, lint/type fixes, simple tests, JSDoc | xai/grok-build-0.1 → xai/grok-4.20-reasoning | ✅ live-verified v2.1 e2e |
 
-**Routing isn't rigid.** For `high`-risk tasks, ultraswarm sends the *same* task to two CLIs in parallel worktrees and a judge panel picks the winner — independent attempts beat one-attempt-and-hope when the task is risky. Routine tasks go to a single CLI.
+**Routing isn't rigid.** For `high`-risk tasks, ultraswarm sends the *same* task to two CLIs in parallel worktrees and a judge panel picks the winner — independent attempts beat one-attempt-and-hope when the task is risky. Routine tasks go to a single CLI, and a failed attempt escalates the model tier before retrying.
+
+**Model IDs drift.** CLIs auto-update and rename models (observed live: grok went 0.2.43→0.2.47 overnight). An invalid model ID does **not** fail fast — codex hangs until the wrapper timeout — so Phase 0 re-verifies configured models each run (`opencode models`, `grok models`, codex's `~/.codex/models_cache.json`) and CI validates the shipped config's structure on every push.
 
 **Health is checked at runtime, every run.** Phase 0 runs `<cli> --version` *and* a write probe (it has the CLI create a trivial file inside a scratch worktree) for each CLI before routing. `--version` proves a CLI is installed; only the write probe proves it can actually write inside a worktree. Any CLI that fails is dropped from routing and reported to you. If fewer than two survive, the run stops.
 
@@ -237,17 +260,19 @@ The canonical, always-current registry lives in [`skills/ultraswarm/SKILL.md`](s
 
 ## The QA model
 
-QA depth is **tiered by risk** so trivial tasks aren't over-verified and risky ones aren't under-verified.
+QA depth is **adaptive** — it scales with both risk and complexity, so trivial tasks aren't over-verified and risky ones aren't under-verified.
 
 **Routine tasks:**
 - Mechanical gates (build / typecheck / test / lint) run inside the worktree.
-- One Claude review agent reads the diff and checks: acceptance criteria actually met, conventions followed, no scope creep, no silently swallowed errors, tests verify intent rather than hardcoded outputs.
+- One Claude review agent reads the diff — Haiku for simple tasks (complexity ≤30), Sonnet above that — and checks: acceptance criteria actually met, conventions followed, no scope creep, no silently swallowed errors, tests verify intent rather than hardcoded outputs. A reviewer that flags `requires_expert_review` escalates the diff to an Opus second pass.
 
-**High-risk tasks** (anything touching auth/security/payments, shared interfaces or data models, architectural changes, or logic with no existing test coverage):
-- The two competing implementations go to a **judge panel** that scores correctness / simplicity / convention-fit; the winner advances.
-- The winner faces a **3-lens adversarial verify** — a *correctness* lens, a *security* lens (the standard secret/injection/authz/leak checks), and a *regression* lens — each prompted to **refute** the work. It needs a 2-of-3 majority to pass.
+**High-risk tasks** (anything touching auth/security/payments, shared interfaces or data models, architectural changes, or logic with no existing test coverage — plus any task scoring >70 complexity):
+- Two CLIs implement the *same* task in parallel worktrees; a Sonnet **judge panel** scores correctness / model efficiency / complexity handling and the winner advances.
+- The winner faces a **3-lens Opus adversarial verify** — *correctness*, *security* (secret/injection/authz/leak checks), and *regression* lenses, each prompted to **refute** the work with explicit verdict-polarity rules. Approval requires a hard **quorum of ≥2 lens votes**, a confidence-weighted score ≥60, and **zero critical refutations** — a single `severity: critical` finding fails the task no matter how confident the other lenses are.
 
-**When QA rejects:** the task retries on the *same* CLI with the reviewer's concrete feedback appended (so the next attempt knows exactly what to fix). If it exhausts retries, it reassigns to an alternate CLI carrying the accumulated feedback. If every path is exhausted, the task tombstones as failed — and Claude either implements it directly (flagged) or reports it, never silently drops it.
+**When QA rejects:** the task retries on the *same* CLI with the reviewer's concrete feedback appended **and the model tier escalated** (simple→moderate→complex→expert), so the next attempt is both better-informed and better-equipped. If it exhausts retries, it reassigns to an alternate CLI carrying the accumulated feedback *and* the escalated tier. If every path is exhausted, the task tombstones as failed — and Claude either implements it directly (flagged) or reports it, never silently drops it.
+
+This is not theoretical: in the v2.1 live validation the adversarial lenses caught a `validateConfig` crash, an `NaN` complexity score silently routing to the most expensive tier, and a documented-config-form that was being silently ignored — all in code that had already passed its mechanical gates.
 
 ---
 
@@ -332,14 +357,16 @@ To choose *which* CLIs the swarm uses, see [Choosing which CLIs to use](#choosin
 | Field | Meaning |
 |---|---|
 | `repo` / `repoName` | Absolute path and short name of the target repo |
-| `baseBranch` | Branch/SHA worktrees fork from and all QA diffs review against (captured in Phase 0) |
+| `baseBranch` | Branch/SHA worktrees fork from and all QA diffs review against — for wave N+1 this is the post-merge HEAD of wave N |
 | `worktreeRoot` | Absolute path for worktrees (default `~/worktrees`, expanded — never a literal `~`) |
 | `gates` | List of `{name, cmd}` — build/test/lint commands run in each worktree and after each merge |
-| `registry` | Map of CLI → verified invocation string |
+| `registry` | Map of CLI → invocation string (single-model) **or** map of tier → invocation string (multi-model) |
 | `alternates` | Map of CLI → fallback CLI for the reassign step |
 | `timeoutMs` | Default wall-clock budget before a run counts as a failed attempt |
-| `timeouts` | Optional per-CLI budget overrides (e.g. codex needs 15 min); falls back to `timeoutMs` |
-| `tasks` | The decomposed task list |
+| `timeouts` | Optional per-CLI (or per-`cli-tier`) budget overrides; falls back to `timeoutMs` |
+| `intelligence` | `maxComplexityPerTask`, `adaptiveQA` and friends — tunes decomposition and QA depth |
+| `tasks` | The decomposed task list for **this wave** — must be mutually independent (the script throws on intra-invocation dependency edges) |
+| `taskGraph` | Optional `independent_clusters` grouping within the wave |
 
 ---
 
@@ -349,7 +376,10 @@ To choose *which* CLIs the swarm uses, see [Choosing which CLIs to use](#choosin
 Install/authenticate more CLIs. Check each manually: `<cli> --version`, then confirm it can write a file unattended in a throwaway `git init` repo. A CLI that needs interactive approval or login won't work as a worker.
 
 **A CLI passes `--version` but every task it gets fails.**
-This is exactly why the write probe exists. Some sandboxed CLIs reject all file writes inside *linked git worktrees* even though they run fine in a normal repo (this is the current codex situation — see below). ultraswarm drops these in Phase 0; if you see it happen, that CLI needs a sandbox/config fix before it can be a worker.
+This is exactly why the write probe exists. Some sandboxed CLIs reject all file writes inside *linked git worktrees* even though they run fine in a normal repo (codex did this until its registry invocation gained `-s workspace-write`). ultraswarm drops these in Phase 0; if you see it happen, that CLI needs a sandbox/config fix before it can be a worker.
+
+**A task hangs for its entire timeout and produces nothing.**
+Check the model ID in your config. An invalid model name does **not** fail fast — codex in particular hangs until the wrapper kills it. Run the CLI's model listing (`opencode models`, `grok models`) and compare against your `overrides`; `validateConfig` in `scripts/router.mjs` catches structural problems but cannot know whether a well-formed ID actually exists on your account.
 
 **Every task tombstones immediately.**
 Almost always a **broken gate**. If your build/test/lint command errors on the *base tree* (before any changes), every worker looks like it failed QA no matter what it wrote. Phase 0 verifies gates green on the base tree first for this reason — but if you bypass that, check the gate command runs clean on a fresh checkout.
@@ -370,16 +400,16 @@ git branch --list 'ultraswarm/*' | xargs -r git branch -D
 
 ## Limitations & status
 
-Honest current state (verified 2026-06-07, re-verified 2026-06-08):
+Honest current state (live-validated 2026-06-10/11 on the v2.1 pipeline):
 
-- **Verified end-to-end:** the routine-tier pipeline (decompose → worktree → CLI codes → gates → review → sequential merge → final verify) using **codex**, **grok**, **agy**, **gemini**, and **opencode**. Each implemented its task correctly on the first attempt; merges gated clean; cleanup verified.
-  - **codex** needs specific flags — `codex exec -s workspace-write --skip-git-repo-check '<prompt>' </dev/null` — because its default sandbox rejects worktree writes and bare `exec` hangs on stdin. It's also **slow (~5 min/task)**, so it runs with a 15-min timeout. The registry encodes all of this.
-- **The high-risk competition path** (competition → judge panel → 3-lens adversarial verify) is **validated live** (2026-06-08): a security-sensitive signed-token task ran codex vs grok through all stages — judge picked the winner, 3 lenses passed, merged green, no defects. Write-up in `docs/notes/highrisk-e2e-2026-06-08.md`.
-- **Enabled but not smoke-tested here:** **droid** — uses `droid exec "<prompt>"` and requires an active Factory subscription. The test machine had no plan, so `droid exec` returned 0 turns / 0 tokens (consistent with no model access, not a CLI defect). On a subscribed machine, Phase 0's write probe verifies it before routing.
-- **Token capture is partial.** The per-run token metric is best-effort: as of 2026-06-08 only **codex** (and droid in JSON mode) emit a parseable token count — grok/gemini/opencode/agy report none. The report shows a `captured/total` coverage fraction and treats the external-token figure as an undercount, never a precise "tokens saved."
-- **Local only** — no remote/CI execution. Everything runs in local worktrees.
+- **Live-validated end-to-end (v2.1):** a real multi-task run built this repo's own model-router module (`scripts/router.mjs` + tests + CI wiring): high-risk **competition → Sonnet judge panel → 3-lens Opus adversarial QA** with feedback retries and **model escalation** (gpt-5.4→gpt-5.5), routine simple-tier tasks approved first attempt, **dependency-wave chaining** with per-wave merges, and **resume-from-checkpoint** recovering a stopped run mid-flight with zero re-spent external tokens. A follow-up single-task run on the installed plugin validated the routine path catching real escaping bugs in review.
+  - **codex** needs specific flags — `codex exec -s workspace-write --skip-git-repo-check '<prompt>' </dev/null` — because its default sandbox rejects worktree writes and bare `exec` hangs on stdin. It's also **slow (~5+ min/task)**, so it runs with a 15-min timeout. The registry encodes all of this.
+- **Enabled but not smoke-tested here:** **droid** — requires an active Factory subscription. The test machine had no plan, so `droid exec` returned 0 turns / 0 tokens (consistent with no model access, not a CLI defect). On a subscribed machine, Phase 0's write probe verifies it before routing. Its tier model IDs (`claude-haiku-4-5`/`claude-sonnet-4-6`) are best-known; only the `claude-opus-4-8` default is confirmed.
+- **Token capture is partial.** Only **codex** (and droid in JSON mode) reliably emit a parseable token count; grok reports intermittently; gemini/opencode/agy report none. The report shows a `captured/total` coverage fraction and treats the external-token figure as an undercount, never a precise "tokens saved."
+- **Cost calibration (measured):** a routine task that passes first attempt costs roughly **70–80k Claude tokens** of orchestration + QA; one QA-rejection retry roughly doubles that; the high-risk competition path runs **~250–550k**. Budget 2–3× the first-attempt figure whenever a rejection is plausible.
+- **Local only** — no remote/CI execution of the swarm itself. Everything runs in local worktrees. (The repo's *validator* runs in CI; the swarm does not.)
 
-CLI availability and flags drift over time. The skill re-checks health and write capability at the start of *every* run, so a CLI that breaks (or gets fixed) is picked up automatically — the table above is a snapshot, not a hard dependency.
+CLI availability, flags, and **model IDs** drift over time (observed live: grok auto-updated mid-testing). The skill re-checks health, write capability, and configured models at the start of *every* run, so a CLI that breaks (or gets fixed) is picked up automatically — the table above is a snapshot, not a hard dependency.
 
 ---
 
@@ -389,10 +419,15 @@ CLI availability and flags drift over time. The skill re-checks health and write
 ultraswarm/
 ├── README.md                                   ← you are here
 ├── CHANGELOG.md                                ← release history
-├── LICENSE                                      ← MIT
-├── ultraswarm.config.example.json              ← starter CLI-selection config
-├── scripts/validate.sh                         ← release validator (run by CI)
-├── .github/workflows/validate.yml              ← CI: validates manifests + Workflow JS on push
+├── LICENSE                                     ← MIT
+├── ultraswarm.config.example.json              ← starter CLI-selection config (minimal)
+├── ultraswarm.config.advanced.json             ← full intelligence config, verified model IDs
+├── scripts/
+│   ├── validate.sh                             ← release validator, 11 checks (supports --json)
+│   ├── router.mjs                              ← model router: loadConfig / validateConfig / resolveRoute
+│   ├── router.test.mjs                         ← 17-case node:test suite for the router
+│   └── workflow-harness.test.mjs               ← behavior tests for the embedded Workflow JS
+├── .github/workflows/validate.yml              ← CI: runs validate.sh on every push/PR
 ├── .claude-plugin/
 │   ├── plugin.json                             ← plugin manifest
 │   └── marketplace.json                        ← single-plugin marketplace listing
@@ -402,6 +437,8 @@ ultraswarm/
     ├── plans/                                  ← implementation plans (historical)
     └── notes/cli-verification.md               ← verified CLI invocations, quirks, e2e findings
 ```
+
+> `router.mjs`, its tests, and the validate.sh wiring were **built by the swarm itself** during the v2.1 live validation — the test workload doubled as the repo's own tooling. The behavior harness (check [11]) tests the orchestration logic in the skill's embedded Workflow JS on every push, so QA-gate regressions break CI before they can burn tokens in a live run.
 
 > Note: the implementation plan's embedded skill template is intentionally **historical** — it predates the fixes made during review and the end-to-end test. `skills/ultraswarm/SKILL.md` is the only canonical copy.
 
