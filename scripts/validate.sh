@@ -19,12 +19,56 @@ ROUTER_TEST="$ROOT/scripts/router.test.mjs"
 ADV_CFG="$ROOT/ultraswarm.config.advanced.json"
 WORKFLOW_TEST="$ROOT/scripts/workflow-harness.test.mjs"
 
+JSON_MODE=0
+for arg in "$@"; do
+  case "$arg" in
+    --json) JSON_MODE=1 ;;
+  esac
+done
+
+CURRENT_CHECK=0
+CURRENT_CHECK_NAME=""
+JSON_TMP=""
+if [ "$JSON_MODE" -eq 1 ]; then
+  JSON_TMP="$(mktemp)"
+fi
+
 fails=0
-pass() { printf '  \xe2\x9c\x93 %s\n' "$1"; }
-fail() { printf '  \xe2\x9c\x97 %s\n' "$1"; fails=$((fails + 1)); }
+begin_check() {
+  CURRENT_CHECK="$1"
+  CURRENT_CHECK_NAME="$2"
+  if [ "$JSON_MODE" -eq 0 ]; then
+    echo "[$CURRENT_CHECK] $CURRENT_CHECK_NAME"
+  fi
+}
+record_json() {
+  CHECK="$CURRENT_CHECK" NAME="$CURRENT_CHECK_NAME" node -e '
+    console.log(JSON.stringify({
+      check: Number(process.env.CHECK),
+      name: process.env.NAME,
+      pass: process.argv[1] === "true",
+      detail: process.argv[2],
+    }));
+  ' "$1" "$2" >>"$JSON_TMP"
+}
+pass() {
+  if [ "$JSON_MODE" -eq 1 ]; then
+    record_json true "$1"
+  else
+    printf '  \xe2\x9c\x93 %s\n' "$1"
+  fi
+}
+fail() {
+  if [ "$JSON_MODE" -eq 1 ]; then
+    record_json false "$1"
+  else
+    printf '  \xe2\x9c\x97 %s\n' "$1"
+  fi
+  fails=$((fails + 1))
+}
 
 # --- Check 1: Manifests parse -------------------------------------------------
-echo "[1] Manifests parse"
+begin_check 1 "Manifests parse"
 if jq empty "$PLUGIN_JSON" 2>/dev/null; then
   pass "plugin.json is valid JSON"
 else
@@ -39,7 +83,7 @@ fi
 # --- Check 2: No manifest conflict --------------------------------------------
 # The marketplace plugin entry must NOT declare component keys (skills/commands/
 # agents) while plugin.json exists — that combination caused a v0.3 load error.
-echo "[2] No manifest conflict (marketplace plugin entry vs plugin.json)"
+begin_check 2 "No manifest conflict (marketplace plugin entry vs plugin.json)"
 if [ ! -f "$PLUGIN_JSON" ]; then
   pass "plugin.json absent — component-key conflict not possible"
 # First require a non-empty plugins array — otherwise `.plugins[0]` is null and
@@ -60,7 +104,7 @@ fi
 # `jq -r` on an absent key prints literal "null" with rc 0, so we must also
 # reject "null"/empty explicitly — otherwise three absent versions would all
 # equal "null" and false-pass as a match.
-echo "[3] Versions agree"
+begin_check 3 "Versions agree"
 read_version() { # <file> <jq-filter>
   if [ ! -f "$1" ]; then
     echo "<missing-file>"
@@ -76,9 +120,11 @@ read_version() { # <file> <jq-filter>
 v_plugin="$(read_version "$PLUGIN_JSON" '.version')"
 v_meta="$(read_version "$MARKET_JSON" '.metadata.version')"
 v_entry="$(read_version "$MARKET_JSON" '.plugins[0].version')"
-echo "      plugin.json .version                  = $v_plugin"
-echo "      marketplace.json .metadata.version    = $v_meta"
-echo "      marketplace.json .plugins[0].version  = $v_entry"
+if [ "$JSON_MODE" -eq 0 ]; then
+  echo "      plugin.json .version                  = $v_plugin"
+  echo "      marketplace.json .metadata.version    = $v_meta"
+  echo "      marketplace.json .plugins[0].version  = $v_entry"
+fi
 v3_bad=""
 for v in "$v_plugin" "$v_meta" "$v_entry"; do
   case "$v" in
@@ -94,13 +140,13 @@ else
 fi
 
 # --- Check 4: Embedded Workflow JS parses -------------------------------------
-echo "[4] Embedded Workflow JS parses"
+begin_check 4 "Embedded Workflow JS parses"
 # `mktemp --suffix=` is a GNU coreutils extension (present on the Ubuntu CI
 # runner). The script also advertises local use; on BSD/macOS mktemp this flag
 # would need adjusting.
 TMP_JS="$(mktemp --suffix=.js)"
 TMP_ERR="$(mktemp)"
-trap 'rm -f "$TMP_JS" "$TMP_ERR"' EXIT
+trap 'rm -f "$TMP_JS" "$TMP_ERR" "$JSON_TMP"' EXIT
 
 # Extract the fenced block between a full-line ```js and the next full-line ```.
 # Anchor on full lines so ```json does not match.
@@ -131,7 +177,7 @@ else
 fi
 
 # --- Check 5: No resume-breaking tokens in the JS block -----------------------
-echo "[5] No resume-breaking tokens in Workflow JS"
+begin_check 5 "No resume-breaking tokens in Workflow JS"
 if [ -s "$TMP_JS" ]; then
   bad=""
   for tok in 'Date.now(' 'Math.random(' 'new Date('; do
@@ -149,7 +195,7 @@ else
 fi
 
 # --- Check 6: Example config valid --------------------------------------------
-echo "[6] Example config valid"
+begin_check 6 "Example config valid"
 if jq empty "$CONFIG_JSON" 2>/dev/null; then
   pass "ultraswarm.config.example.json is valid JSON"
 else
@@ -157,7 +203,7 @@ else
 fi
 
 # --- Check 7: Skill frontmatter present ---------------------------------------
-echo "[7] Skill frontmatter present"
+begin_check 7 "Skill frontmatter present"
 first_line="$(head -n 1 "$SKILL_MD")"
 if [ "$first_line" != "---" ]; then
   fail "SKILL.md first line is not '---' (got '$first_line')"
@@ -173,7 +219,7 @@ else
 fi
 
 # --- Check 8: Router module syntax --------------------------------------------
-echo "[8] Router module syntax"
+begin_check 8 "Router module syntax"
 if [ ! -f "$ROUTER_MJS" ]; then
   fail "scripts/router.mjs does not exist"
 else
@@ -185,7 +231,7 @@ else
 fi
 
 # --- Check 9: Router test suite -----------------------------------------------
-echo "[9] Router test suite"
+begin_check 9 "Router test suite"
 if [ ! -f "$ROUTER_TEST" ]; then
   fail "scripts/router.test.mjs does not exist"
 else
@@ -197,7 +243,7 @@ else
 fi
 
 # --- Check 10: Advanced config validates --------------------------------------
-echo "[10] Advanced config validates"
+begin_check 10 "Advanced config validates"
 if [ ! -f "$ADV_CFG" ]; then
   fail "ultraswarm.config.advanced.json does not exist"
 elif [ ! -f "$ROUTER_MJS" ]; then
@@ -218,7 +264,7 @@ Promise.all([import(process.argv[1]), import("node:fs")]).then(([m, fs]) => {
 fi
 
 # --- Check 11: Workflow behavior harness ---------------------------------------
-echo "[11] Workflow behavior harness"
+begin_check 11 "Workflow behavior harness"
 if [ ! -f "$WORKFLOW_TEST" ]; then
   fail "scripts/workflow-harness.test.mjs does not exist"
 else
@@ -230,6 +276,20 @@ else
 fi
 
 # --- Summary ------------------------------------------------------------------
+if [ "$JSON_MODE" -eq 1 ]; then
+  node -e '
+    const fs = require("fs");
+    const raw = fs.readFileSync(process.argv[1], "utf8").trim();
+    const arr = raw ? raw.split("\n").map((line) => JSON.parse(line)) : [];
+    console.log(JSON.stringify(arr));
+  ' "$JSON_TMP"
+  if [ "$fails" -eq 0 ]; then
+    exit 0
+  else
+    exit 1
+  fi
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then
   printf '\xe2\x9c\x93 All checks passed.\n'
