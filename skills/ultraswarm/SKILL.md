@@ -727,14 +727,19 @@ async function runAdversarialQA(t, impl) {
         model: 'opus'
       })))).filter(Boolean)
     
+    // Quorum guard: a high-risk task must never pass without at least 2 lens votes
+    if (votes.length < 2) {
+      return { approve: false, issues: [`adversarial verification could not complete (${votes.length}/${EXPERT_LENSES.length} lens agents responded)`] }
+    }
+    
     const weightedScore = votes.reduce((sum, v) => sum + (v.refuted ? 0 : v.confidence), 0) / votes.length
-    const ok = weightedScore >= QA_CONFIDENCE_THRESHOLD
     const criticalIssues = votes.filter(v => v.refuted && v.severity === 'critical')
+    // Any critical refutation is an instant fail regardless of the other lenses' confidence
+    const ok = weightedScore >= QA_CONFIDENCE_THRESHOLD && criticalIssues.length === 0
     
     const issues = [
       ...votes.filter(v => v.refuted).flatMap(v => v.reasons),
       ...(criticalIssues.length > 0 ? ['CRITICAL issues found - requires immediate attention'] : []),
-      ...(votes.length < 2 ? ['adversarial verification could not complete'] : []),
     ]
     return { approve: ok, issues }
   } catch (error) {
@@ -761,9 +766,10 @@ async function adaptiveQA(t, impl) {
  * @param {number} maxAttempts - Maximum number of implementation attempts
  * @param {string[]} seedFeedback - Initial feedback from previous attempts
  * @param {number} attemptOffset - Starting attempt number offset
+ * @param {string|null} startTier - Tier to begin at (carries escalation across CLI reassignment); defaults to the task's own tier
  * @returns {Promise<Object>} Result object with success status and metrics
  */
-async function intelligentAttemptLoop(t, cli, maxAttempts, seedFeedback, attemptOffset = 0) {
+async function intelligentAttemptLoop(t, cli, maxAttempts, seedFeedback, attemptOffset = 0, startTier = null) {
   try {
     // Validate inputs
     const validCli = validateCliName(cli)
@@ -775,7 +781,7 @@ async function intelligentAttemptLoop(t, cli, maxAttempts, seedFeedback, attempt
     }
     
     let feedback = seedFeedback
-    let currentModelTier = validateModelTier(t.model_tier || 'simple')
+    let currentModelTier = validateModelTier(startTier || t.model_tier || 'simple')
   
   for (let n = 1; n <= maxAttempts; n++) {
     const attempt = attemptOffset + n
@@ -787,11 +793,13 @@ async function intelligentAttemptLoop(t, cli, maxAttempts, seedFeedback, attempt
       if (currentIndex < tiers.length - 1) {
         currentModelTier = tiers[currentIndex + 1]
         log(`${t.id}: escalating to ${currentModelTier} model for attempt ${attempt}`)
-        t.model_tier = currentModelTier  // Update task for this attempt
       }
     }
     
-    const impl = await intelligentImplement(t, cli, attempt, feedback)
+    // Immutable per-attempt view: never mutate the shared task object
+    const tAttempt = { ...t, model_tier: currentModelTier }
+    
+    const impl = await intelligentImplement(tAttempt, cli, attempt, feedback)
     if (!impl || impl.status !== 'ok') {
       const gates = impl ? (impl.gate_results || []).filter(g => !g.pass)
         .map(g => `${g.name}: ${g.detail || 'failed'}${g.duration ? ` (${g.duration}ms)` : ''}`)
@@ -802,7 +810,7 @@ async function intelligentAttemptLoop(t, cli, maxAttempts, seedFeedback, attempt
       continue
     }
     
-    const verdict = await adaptiveQA(t, impl)
+    const verdict = await adaptiveQA(tAttempt, impl)
     if (verdict.approve) return { 
       task: t.id, cli, impl, attempts: attempt, feedback, 
       final_model_tier: currentModelTier, complexity_achieved: impl.complexity_achieved 
@@ -899,8 +907,9 @@ async function handleFailedCompetition(t, all, winner = null) {
   const retried = await intelligentAttemptLoop(t, retryCli, 2, seed, 1)
   if (!retried.exhausted) return { ...retried, graft: [] }
   
+  // Carry the escalated tier into the alternate CLI (don't restart at the task's base tier)
   const fallback = await intelligentAttemptLoop(t, cfg.alternates[retryCli], 2,
-    [...retried.feedback, `prior CLI (${retryCli}) exhausted`], 3)
+    [...retried.feedback, `prior CLI (${retryCli}) exhausted`], 3, retried.final_model_tier)
   return fallback.exhausted ? { task: t.id, failed: true } : fallback
 }
 
@@ -911,8 +920,9 @@ async function runStandardTask(t) {
     if (!primary.exhausted) return primary
     
     log(`${t.id}: ${t.cli} exhausted, reassigning to ${cfg.alternates[t.cli]}`)
+    // Carry the escalated tier into the alternate CLI (don't restart at the task's base tier)
     const fallback = await intelligentAttemptLoop(t, cfg.alternates[t.cli], 2,
-      [...primary.feedback, `prior CLI (${t.cli}) exhausted`], 3)
+      [...primary.feedback, `prior CLI (${t.cli}) exhausted`], 3, primary.final_model_tier)
     return fallback.exhausted ? { task: t.id, failed: true } : fallback
   } catch (error) {
     log(`Standard task failed for ${t.id}: ${error.message}`)
