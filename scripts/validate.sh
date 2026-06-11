@@ -17,6 +17,7 @@ CONFIG_JSON="$ROOT/ultraswarm.config.example.json"
 ROUTER_MJS="$ROOT/scripts/router.mjs"
 ROUTER_TEST="$ROOT/scripts/router.test.mjs"
 ADV_CFG="$ROOT/ultraswarm.config.advanced.json"
+WORKFLOW_TEST="$ROOT/scripts/workflow-harness.test.mjs"
 
 fails=0
 pass() { printf '  \xe2\x9c\x93 %s\n' "$1"; }
@@ -213,6 +214,18 @@ Promise.all([import(process.argv[1]), import("node:fs")]).then(([m, fs]) => {
     pass "ultraswarm.config.advanced.json passes validateConfig"
   else
     fail "ultraswarm.config.advanced.json failed validateConfig"
+  fi
+fi
+
+# --- Check 11: Workflow behavior harness ---------------------------------------
+echo "[11] Workflow behavior harness"
+if [ ! -f "$WORKFLOW_TEST" ]; then
+  fail "scripts/workflow-harness.test.mjs does not exist"
+else
+  if node --test "$WORKFLOW_TEST" >/dev/null 2>&1; then
+    pass "embedded Workflow JS behavior tests passed"
+  else
+    fail "embedded Workflow JS behavior tests failed"
   fi
 fi
 
