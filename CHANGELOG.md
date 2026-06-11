@@ -4,7 +4,7 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [2.2.0] — 2026-06-11
 
 ### Added
 - **Workflow behavior harness** (`scripts/workflow-harness.test.mjs`): 16
@@ -208,6 +208,7 @@ existing feature set is now proven.
 - Packaged as a single-plugin marketplace (`.claude-plugin/`), MIT licensed,
   with README, design spec, implementation plan, and CLI verification registry.
 
+[2.2.0]: https://github.com/fubak/ultraswarm/releases/tag/v2.2.0
 [2.1.0]: https://github.com/fubak/ultraswarm/releases/tag/v2.1.0
 [2.0.0]: https://github.com/fubak/ultraswarm/releases/tag/v2.0.0
 [0.4.0]: https://github.com/fubak/ultraswarm/releases/tag/v0.4
