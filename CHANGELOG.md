@@ -4,6 +4,63 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] — 2026-06-11
+
+A hardening + validation release driven by a full live end-to-end test of the
+v2.0 intelligence features — the swarm built its own model-router module, and
+every bug the test surfaced is fixed here.
+
+### Added
+- **Model-router module** (built by the swarm itself in the live e2e:
+  codex/gpt-5.5 won the t1 competition, grok wrote the tests, opencode wired
+  CI): `scripts/router.mjs` — `DEFAULT_REGISTRY`, `loadConfig`
+  (global+project merge per the documented rules), `validateConfig`
+  (9 rules, never throws), `resolveRoute` (complexity→tier resolution,
+  flat + nested override forms, timeout fallback chain).
+- **Router test suite**: `scripts/router.test.mjs` — 17 node:test cases
+  covering merge rules, tier boundaries, fallbacks, and validation errors.
+- **CI checks [8]–[10]** in `scripts/validate.sh`: router syntax, router test
+  suite, and `validateConfig` over the shipped advanced config — bad model
+  IDs or malformed configs now fail CI on every push.
+- **Dependency waves.** Phase 0 computes topological waves over task
+  dependencies; each wave runs as its own Workflow chained on the previous
+  wave's post-merge HEAD, so dependents always build on their prerequisites
+  (a single Workflow's worktrees all fork the same base SHA — e2e-verified
+  gap). The Workflow script fail-fasts if handed intra-invocation dependency
+  edges; tombstoned tasks block their dependents loudly instead of letting
+  them run blind.
+
+### Fixed
+- **Adversarial-lens verdict polarity** (live-e2e finding): the v2.0 lens
+  prompt dropped the explicit polarity rule, so Opus lenses returned
+  `refuted=true` with exonerating reasons — three doomed QA rounds rejected a
+  judge-scored-91 implementation. The prompt now pins polarity: refuted=true
+  only for concrete demonstrable problems, reasons describe problems only.
+- **High-risk QA approval loopholes**: a single surviving lens vote could
+  approve (the <2-votes check only warned); now ≥2 votes are a hard quorum.
+  A `severity: critical` refutation could be outvoted by two high-confidence
+  passes; now any critical refutation is an instant fail.
+- **Verified model IDs**: the advanced config and registry tables referenced
+  nonexistent models (gpt-4o-*, gemini-2-*, grok-5*, claude-opus-pro);
+  replaced with IDs verified against the installed CLIs (gpt-5.4/5.5 family,
+  gemini-2.5-*, grok-build, claude-*-4-x, opencode xai/google models).
+  Documented that an invalid model ID does not fail fast (codex hangs to the
+  wrapper timeout), so Phase 0 must verify configured models before routing.
+- **Task-object mutation**: model-tier escalation now uses an immutable
+  per-attempt copy; the escalated tier carries into the alternate CLI via an
+  explicit `startTier` parameter instead of a shared-state side effect.
+
+### Verified
+- **Full live e2e of the intelligence pipeline** (2026-06-10): 3-task run —
+  high-risk competition → judge panel (91 vs 73) → 3-lens Opus adversarial QA
+  with feedback retries and gpt-5.4→gpt-5.5 escalation; routine simple-tier
+  tasks approved first-attempt; resume-from-checkpoint recovered the run
+  mid-flight after the lens-prompt fix with zero re-spent external tokens;
+  token capture 6/6 CLI runs (~149k external, ~691k Claude subagent).
+- **44-test offline harness** over the embedded Workflow JS: tier routing,
+  adaptive QA depths, escalation, competition, exhaustion/tombstone,
+  validation guards, quorum/critical rules, immutability, wave guard.
+
 ## [2.0.0] — 2026-06-09
 
 A major intelligence upgrade transforming ultraswarm into an advanced AI orchestration platform with sophisticated prompt analysis, dynamic model routing, and ultra-granular task decomposition.
@@ -133,6 +190,8 @@ existing feature set is now proven.
 - Packaged as a single-plugin marketplace (`.claude-plugin/`), MIT licensed,
   with README, design spec, implementation plan, and CLI verification registry.
 
+[2.1.0]: https://github.com/fubak/ultraswarm/releases/tag/v2.1.0
+[2.0.0]: https://github.com/fubak/ultraswarm/releases/tag/v2.0.0
 [0.4.0]: https://github.com/fubak/ultraswarm/releases/tag/v0.4
 [0.3.0]: https://github.com/fubak/ultraswarm/releases/tag/v0.3
 [0.2.0]: https://github.com/fubak/ultraswarm/releases/tag/v0.2
