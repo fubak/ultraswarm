@@ -4,6 +4,31 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [2.4.2] — 2026-06-12
+
+High-risk path hardening: the competition/escalation path now works under the documented
+config shape and fails cleanly. Closes #13, #14. Verified with two live end-to-end runs.
+
+### Fixed
+- **#13** — high-risk tasks no longer crash with *"CLI name must be a non-empty string"*
+  when a worker fails early with no alternate, and retries no longer die with *"a branch
+  named … already exists"*. The competition and fallback paths now gate on cli *usability*
+  (a known worker resolvable via `DEFAULT_REGISTRY`/`overrides`, or an explicit `registry`
+  entry) instead of `cfg.registry` alone — so **high-risk tasks actually run under the
+  documented `enabled`/`overrides` config** (previously they always tombstoned), a
+  missing/self alternate tombstones cleanly, and stale worktree branches are pruned before
+  re-creation.
+- **#14** — a dependent of a failed high-risk task is blocked across waves and every task
+  appears in the final report (wired by v2.4.1's blocked-dependency reporting; now covered
+  by a multi-wave high-risk test and a live run).
+
+### Added
+- High-risk integration tests (overrides-config competition + merge, no-alternate clean
+  tombstone, multi-wave high-risk failure → blocked) and two **live** end-to-end runs
+  through `bin`: a failing high-risk task with a blocked dependent (no crash, complete
+  report), and the full happy path (competition → Sonnet judge → 3-lens Opus adversarial
+  QA → merge). 99 tests total.
+
 ## [2.4.1] — 2026-06-12
 
 Runner hardening: the standalone runner now works end-to-end through its CLI entry
