@@ -201,7 +201,7 @@ Claude Code is the **primary host** — `/ultraswarm` runs the full Workflow-nat
 
 The plan is `{"tasks":[{id,description,files,cli,model_tier,complexity_score,risk,dependencies,prompt}]}`; the runner validates it (rejecting unknown CLIs, bad tiers, dependency cycles, and unsafe task ids) then runs waves → implement → adaptive QA → merge → report. For a bare shell with no host agent, `--decompose "<task>"` does a single lower-fidelity decomposition (no repo exploration). The `hosts/codex/AGENTS.md` and `hosts/grok/ultraswarm.md` launchers tell those agents to decompose → `--plan-file` → relay the report.
 
-**Cost & auth (read this):** the standalone runner's QA brain runs on the Anthropic API, so it **bills Anthropic API tokens** for decomposition + QA — a different billing model from Claude Code, where that reasoning rides your session. It needs `ANTHROPIC_API_KEY` in the environment, plus each worker CLI's own auth. Claude Code remains the highest-fidelity host (native live UI + resume).
+**Cost & auth (read this):** the standalone runner's QA brain defaults to the **local `claude` CLI** (`claude -p`), so if your machine already has an authenticated Claude Code install, **no API key is needed** — the brain reuses your Claude Code auth and billing, exactly like the `/ultraswarm` path. If `claude` isn't on `PATH`, the runner falls back to the raw **Anthropic API**, which needs `ANTHROPIC_API_KEY` and bills API tokens per call. Force either with `ULTRASWARM_BRAIN=claude-cli` or `ULTRASWARM_BRAIN=anthropic-api`. Either way, each worker CLI still needs its own auth. Claude Code remains the highest-fidelity host (native live UI + resume).
 
 ---
 

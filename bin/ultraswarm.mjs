@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import fs from 'node:fs'; import path from 'node:path'
-import { execSync } from 'node:child_process'
+import { execSync, execFileSync } from 'node:child_process'
 import { loadConfig } from '../scripts/router.mjs'
 import { validatePlan } from '../lib/plan-schema.mjs'
 import { AnthropicClient } from '../lib/llm/anthropic.mjs'
+import { ClaudeCliClient } from '../lib/llm/claude-cli.mjs'
 import { resolveBrainModel } from '../lib/llm/brain-router.mjs'
 import { decompose } from '../lib/orchestrator/decompose.mjs'
 import { runSwarm } from '../lib/orchestrator/runner.mjs'
@@ -25,6 +26,19 @@ function detectGates(repo) {
 
 function arg(flag) { const i = process.argv.indexOf(flag); return i >= 0 ? process.argv[i + 1] : undefined }
 
+// Pick the brain. Default: the local authenticated `claude` CLI (no ANTHROPIC_API_KEY, reuses your
+// Claude Code auth). Fall back to the raw Anthropic API if `claude` isn't on PATH.
+// Override with ULTRASWARM_BRAIN=claude-cli | anthropic-api.
+function hasClaudeCli() {
+  try { execFileSync('claude', ['--version'], { stdio: 'ignore' }); return true } catch { return false }
+}
+function makeBrain() {
+  const pref = process.env.ULTRASWARM_BRAIN
+  if (pref === 'anthropic-api') return new AnthropicClient()
+  if (pref === 'claude-cli') return new ClaudeCliClient()
+  return hasClaudeCli() ? new ClaudeCliClient() : new AnthropicClient()
+}
+
 async function main() {
   const planFile = arg('--plan-file')
   const decomposeTask = arg('--decompose')
@@ -40,7 +54,7 @@ async function main() {
   let plan
   if (planFile) plan = JSON.parse(fs.readFileSync(planFile, 'utf8'))
   else if (decomposeTask) {
-    const brain = new AnthropicClient()
+    const brain = makeBrain()
     plan = await decompose(brain, decomposeTask, repo, resolveBrainModel('opus', userConfig).model)
     if (!plan) { console.error('decomposition failed'); process.exit(1) }
   } else { console.error('usage: ultraswarm --plan-file <json> | --decompose "<task>" [--yes]'); process.exit(2) }
@@ -49,7 +63,7 @@ async function main() {
   if (!yes) { console.error('re-run with --yes to execute'); process.exit(0) }
 
   const cfg = buildRunConfig(base, plan)
-  const brain = new AnthropicClient()
+  const brain = makeBrain()
   const resumeId = arg('--resume')
   const runId = resumeId || `${base.baseBranch.slice(0, 8)}-${arg('--run') || '1'}`
   const journalDir = path.join(base.repo, '.ultraswarm')
