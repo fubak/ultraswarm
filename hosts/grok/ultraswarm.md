@@ -8,4 +8,4 @@ When the user asks to run an ultraswarm swarm with Grok as the host, do NOT writ
    Task `id` must contain only [A-Za-z0-9._-] (no spaces or shell metacharacters).
 3. Present the plan to the user. On approval, run and relay the output of:
        node <path-to-ultraswarm>/bin/ultraswarm.mjs --plan-file .ultraswarm-plan.json --yes
-Requires ANTHROPIC_API_KEY in the environment (the runner's QA brain).
+The runner's QA brain defaults to the local authenticated `claude` CLI — no API key needed if Claude Code is installed and signed in. (Set `ULTRASWARM_BRAIN=anthropic-api` + `ANTHROPIC_API_KEY` to use the raw Anthropic API instead.)
