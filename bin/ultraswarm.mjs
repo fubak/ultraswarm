@@ -8,6 +8,7 @@ import { resolveBrainModel } from '../lib/llm/brain-router.mjs'
 import { decompose } from '../lib/orchestrator/decompose.mjs'
 import { runSwarm } from '../lib/orchestrator/runner.mjs'
 import { buildReport, cleanup } from '../lib/orchestrator/report.mjs'
+import { Journal } from '../lib/journal.mjs'
 
 export function buildRunConfig(base, plan) {
   const { valid, errors } = validatePlan(plan)
@@ -49,7 +50,12 @@ async function main() {
 
   const cfg = buildRunConfig(base, plan)
   const brain = new AnthropicClient()
-  const result = await runSwarm(cfg, brain)
+  const resumeId = arg('--resume')
+  const runId = resumeId || `${base.baseBranch.slice(0, 8)}-${arg('--run') || '1'}`
+  const journalDir = path.join(base.repo, '.ultraswarm')
+  if (!fs.existsSync(journalDir)) fs.mkdirSync(journalDir, { recursive: true })
+  const journal = new Journal(path.join(journalDir, `run-${runId}.jsonl`))
+  const result = await runSwarm(cfg, brain, journal)
   console.log('\n' + buildReport(result))
   cleanup(cfg)
 }
