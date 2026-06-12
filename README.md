@@ -55,7 +55,7 @@ flowchart TD
     subgraph wf [" Enhanced Workflow — intelligent orchestration "]
         direction TB
         P1["<b>Phase 1 · Intelligent Implement</b><br/>dynamic model selection per complexity<br/>dependency-aware coordination<br/>model escalation on retries<br/>competition for high-risk/complex tasks"]
-        P2["<b>Phase 2 · Adaptive QA</b><br/>simple/moderate (≤50): Haiku review<br/>complex (>50): Sonnet analysis<br/>high-risk: Sonnet→Opus adversarial cascade<br/>confidence scoring + expert escalation"]
+        P2["<b>Phase 2 · Adaptive QA</b><br/>simple/moderate (≤50): Haiku review<br/>complex (&gt;50): Sonnet analysis<br/>high-risk: Sonnet→Opus adversarial cascade<br/>confidence scoring + expert escalation"]
         P1 --> P2
     end
     CONF -- yes --> P1
