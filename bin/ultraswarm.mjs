@@ -48,7 +48,11 @@ async function main() {
   const base = {
     repo, repoName, baseBranch: execSync('git rev-parse HEAD', { cwd: repo }).toString().trim(),
     worktreeRoot: path.join(process.env.HOME, 'worktrees'), gates: detectGates(repo),
-    registry: userConfig.registry || {}, alternates: userConfig.alternates || {}, intelligence: userConfig.intelligence || {},
+    registry: userConfig.registry || {}, // legacy direct map (still supported via fallback)
+    overrides: userConfig.overrides || {},
+    intelligence: userConfig.intelligence || {},
+    alternates: userConfig.alternates || {},
+    enabled: userConfig.enabled,
   }
 
   let plan
