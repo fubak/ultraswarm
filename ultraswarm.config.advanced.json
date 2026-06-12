@@ -5,7 +5,8 @@
     "opencode: from `opencode models` (xai/*, google/*)",
     "grok: from `grok models` (grok-build, grok-composer-2.5-fast)",
     "gemini/agy/droid lower tiers: best-known IDs, re-verify with `/ultraswarm config` — Phase 0's write probe drops any tier whose model is rejected.",
-    "Every models block MUST include a 'simple' tier — it is the fallback when a task's tier is not configured."
+    "Every models block MUST include a 'simple' tier — it is the fallback when a task's tier is not configured.",
+    "intelligence.maxIntelligence (opt-in, default false): flips the ceiling QA slots from Opus to Fable — the always-on security adversarial lens and the expert-escalation review — and allows Fable for expert-tier decomposition. Fable costs ~30% more tokens (tokenizer) plus premium pricing, so it is OFF by default; turn it on only for the most safety-critical work."
   ],
   "enabled": ["codex", "gemini", "grok", "agy", "droid", "opencode"],
   "intelligence": {
@@ -20,6 +21,7 @@
       "taskGranularity": "ultra-fine",
       "maxTaskComplexity": 15
     },
+    "maxIntelligence": false,
     "modelRouting": {
       "enabled": true,
       "claudeModels": {

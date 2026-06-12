@@ -4,6 +4,44 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [2.3.0] — 2026-06-12
+
+Claude-model token optimization: spend strong-model tokens only where they change
+the outcome, and stop paying the session model's rate for mechanical work.
+
+### Changed
+- **Per-phase routing is now real, not aspirational.** Phases 3 (merge) and 4
+  (report) delegate their mechanical work to `Agent({ model: 'haiku' })` subagents
+  (merge escalates to a `sonnet` subagent only on conflict). Previously the
+  "Use Haiku for merge/report" guidance was inert — those phases ran inline in the
+  orchestrator's main loop, which is pinned to the session model (typically Opus),
+  so mechanical merge and report generation were billed at Opus rates.
+- **High-risk adversarial QA is now a cost-aware cascade** (FrugalGPT-style). The
+  `security` lens still always runs on the Opus ceiling (asymmetric risk); the
+  `correctness` and `regression` lenses run on Sonnet first and escalate to Opus
+  only when they refute or return borderline confidence (`<75`). The quorum (≥2
+  votes), confidence-weighted score (≥60), and zero-critical-refutation guarantees
+  are unchanged. Cuts the bulk of the ~250–550k-token high-risk path on clean work.
+- **Trimmed `enhancedImplPrompt`** ~in half — removed the "intelligence" scaffolding
+  the Bash-only implementation wrapper never used, reducing input tokens on every
+  attempt and retry.
+
+### Added
+- **Fable 5 as an opt-in ceiling** via `intelligence.maxIntelligence` (default
+  `false`). When enabled it flips two ceiling slots — the always-on security
+  adversarial lens and the expert-escalation review — and expert-tier decomposition
+  from Opus to Fable. Off by default: Fable costs ≈30% more tokens (its tokenizer)
+  plus premium pricing, so it stays out of the hot path. `fable` is now a valid
+  `claudeModels` value (router `validateConfig` accepts it).
+- Behavior-harness test for the adversarial cascade (security-Opus + Sonnet→Opus
+  escalation) and a router test for `fable` acceptance in `claudeModels`.
+
+### Fixed
+- `router.mjs`: clarified that `complexityThresholds.expert` is a validation
+  ordering anchor only — `getTier` never reads it (expert is the unbounded top
+  tier), so it does not affect routing. The `claudeModels` validation message now
+  lists `fable`.
+
 ## [2.2.0] — 2026-06-11
 
 ### Added
