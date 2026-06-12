@@ -5,13 +5,13 @@
   },
   "metadata": {
     "description": "Advanced AI orchestration with intelligent prompt analysis, dynamic model routing, and ultra-granular task decomposition. Optimizes external CLI usage with complexity-based model selection and adaptive QA for maximum efficiency.",
-    "version": "2.3.0"
+    "version": "2.4.0"
   },
   "plugins": [
     {
       "name": "ultraswarm",
       "description": "Advanced AI orchestration with intelligent prompt analysis, dynamic model routing, and ultra-granular task decomposition. Optimizes external CLI usage with complexity-based model selection and adaptive QA for maximum efficiency.",
-      "version": "2.3.0",
+      "version": "2.4.0",
       "author": {
         "name": "Fubak"
       },

@@ -4,6 +4,47 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [2.4.0] — 2026-06-12
+
+Portability release: a standalone runner lets Codex, Grok, or a bare shell host
+the swarm — no longer Claude-Code-only — while Claude Code stays the primary host.
+
+### Added
+- **Standalone host runner** (`bin/ultraswarm.mjs` + `lib/`). Codex CLI, Grok CLI,
+  or a bare shell can now drive the full pipeline: a host-supplied (or fallback-
+  decomposed) **plan JSON** → dependency **waves → implement → adaptive QA → merge
+  → report**. Shares a host-agnostic *pure core* with the skill (`scripts/router.mjs`
+  reused; prompts + the QA cascade/competition algorithms lifted from `SKILL.md`,
+  proven byte-for-byte by a parity harness). Implementation wrappers run as plain
+  subprocesses (no model); only the brain roles call an LLM.
+  - **`--plan-file <json>`** (host decomposes, runner executes) · **`--decompose
+    "<task>"`** (built-in single-shot fallback) · **`--yes`** · **`--resume <id>`**
+    (run journal keyed on label + prompt-hash, under `.ultraswarm/`).
+  - **Plan contract** (`lib/plan-schema.mjs`): rejects unknown CLIs, bad tiers,
+    dependency cycles, and unsafe task ids (`[A-Za-z0-9._-]` only).
+  - `hosts/codex/AGENTS.md` + `hosts/grok/ultraswarm.md` launchers.
+- **`claude -p` brain adapter** (`lib/llm/claude-cli.mjs`). The runner's QA/decompose
+  brain **defaults to your local authenticated `claude` CLI — no `ANTHROPIC_API_KEY`,
+  no separate API billing**, reusing your Claude Code auth. Falls back to the raw
+  Anthropic API (`lib/llm/anthropic.mjs`, per-model request shaping — no effort/
+  thinking on Haiku) when `claude` isn't on `PATH`. Override with
+  `ULTRASWARM_BRAIN=claude-cli | anthropic-api`. Live-smoked against claude 2.1.175.
+- **`package.json` + deps** (`@anthropic-ai/sdk`, `ajv`); CI now runs `npm ci`.
+  `validate.sh` gains check [12] (parses `bin/` + `lib/`).
+
+### Fixed
+- **Command-injection hardening** (CRITICAL/MEDIUM, two security reviews): all git
+  plumbing that touches plan-derived values now uses `execFileSync` with argv + `--`;
+  task ids are charset-validated at the plan boundary. Worker-CLI and gate commands
+  remain shell by design (trusted operator config), documented inline.
+- **Brain tier→model-id resolution** (CRITICAL, final review): QA/review/judge/lens
+  calls now resolve tier labels (`haiku`…) to real model ids at the agent boundary
+  before hitting the brain (previously sent `'haiku'` to the API).
+- **README accuracy pass**: routine-QA threshold (Haiku ≤50), opencode expert id
+  (`xai/grok-4.20-0309-reasoning`), high-risk QA described as the cascade, router
+  suite count (18), and a repository-layout tree that includes the new runner; plus
+  concrete Codex/Grok/shell run instructions.
+
 ## [2.3.0] — 2026-06-12
 
 Claude-model token optimization: spend strong-model tokens only where they change
