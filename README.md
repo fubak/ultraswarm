@@ -17,6 +17,7 @@ As of v2.1 the full pipeline is **live-validated end-to-end**: competition + jud
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Usage](#usage)
+- [Running from other hosts (Codex / Grok / shell)](#running-from-other-hosts-codex--grok--shell)
 - [Choosing which CLIs to use](#choosing-which-clis-to-use)
 - [The worker registry](#the-worker-registry)
 - [The QA model](#the-qa-model)
@@ -187,6 +188,20 @@ Two other modes:
 5. **Claude reports**: a per-task table (which CLI, how many attempts, QA verdict, files touched) and a loud list of anything that failed, was reassigned, conflicted, or fell back to Claude.
 
 Your working branch is only ever touched in step 4, and only by approved, gate-passing diffs.
+
+---
+
+## Running from other hosts (Codex / Grok / shell)
+
+Claude Code is the **primary host** — `/ultraswarm` runs the full Workflow-native pipeline with live progress and resume. A standalone Node runner (`bin/ultraswarm.mjs`) lets **Codex CLI, Grok CLI, or a bare shell** host the same swarm.
+
+**The model:** the host decomposes (it has repo access), the runner executes. The host writes a validated plan JSON and hands it to the runner:
+
+    node bin/ultraswarm.mjs --plan-file plan.json --yes
+
+The plan is `{"tasks":[{id,description,files,cli,model_tier,complexity_score,risk,dependencies,prompt}]}`; the runner validates it (rejecting unknown CLIs, bad tiers, dependency cycles, and unsafe task ids) then runs waves → implement → adaptive QA → merge → report. For a bare shell with no host agent, `--decompose "<task>"` does a single lower-fidelity decomposition (no repo exploration). The `hosts/codex/AGENTS.md` and `hosts/grok/ultraswarm.md` launchers tell those agents to decompose → `--plan-file` → relay the report.
+
+**Cost & auth (read this):** the standalone runner's QA brain runs on the Anthropic API, so it **bills Anthropic API tokens** for decomposition + QA — a different billing model from Claude Code, where that reasoning rides your session. It needs `ANTHROPIC_API_KEY` in the environment, plus each worker CLI's own auth. Claude Code remains the highest-fidelity host (native live UI + resume).
 
 ---
 
@@ -423,7 +438,7 @@ ultraswarm/
 ├── ultraswarm.config.example.json              ← starter CLI-selection config (minimal)
 ├── ultraswarm.config.advanced.json             ← full intelligence config, verified model IDs
 ├── scripts/
-│   ├── validate.sh                             ← release validator, 11 checks (supports --json)
+│   ├── validate.sh                             ← release validator, 12 checks (supports --json)
 │   ├── router.mjs                              ← model router: loadConfig / validateConfig / resolveRoute
 │   ├── router.test.mjs                         ← 17-case node:test suite for the router
 │   └── workflow-harness.test.mjs               ← behavior tests for the embedded Workflow JS
