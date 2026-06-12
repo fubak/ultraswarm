@@ -4,7 +4,7 @@ import path from 'node:path';
 
 const VALID_TIERS = ['simple', 'moderate', 'complex', 'expert'];
 const VALID_TIER_SET = new Set(VALID_TIERS);
-const VALID_CLAUDE_MODELS = new Set(['haiku', 'sonnet', 'opus']);
+const VALID_CLAUDE_MODELS = new Set(['haiku', 'sonnet', 'opus', 'fable']);
 const DEFAULT_THRESHOLDS = Object.freeze({ simple: 20, moderate: 50, complex: 100 });
 
 function freezeDeep(value) {
@@ -53,6 +53,9 @@ function mergeOverrides(globalOverrides = {}, projectOverrides = {}) {
   return merged;
 }
 
+// Only simple/moderate/complex bound a tier; "expert" is the unbounded top tier (anything
+// above `complex`). So `complexityThresholds.expert` never affects routing — it exists only
+// as the ordering anchor validateIntelligence checks (simple < moderate < complex < expert).
 function getTier(score, thresholds) {
   if (!Number.isFinite(score)) {
     return 'simple';
@@ -120,7 +123,7 @@ function validateIntelligence(config, errors) {
   }
   for (const [key, value] of Object.entries(config.intelligence?.modelRouting?.claudeModels ?? {})) {
     if (!VALID_CLAUDE_MODELS.has(value)) {
-      errors.push(`intelligence.modelRouting.claudeModels.${key} must be one of haiku, sonnet, opus; got ${JSON.stringify(value)}.`);
+      errors.push(`intelligence.modelRouting.claudeModels.${key} must be one of haiku, sonnet, opus, fable; got ${JSON.stringify(value)}.`);
     }
   }
 }

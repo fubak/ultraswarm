@@ -154,6 +154,16 @@ describe('router', () => {
       assert.strictEqual(res.valid, false);
       assert.ok(res.errors.some((e) => e.includes('must be one of haiku, sonnet, opus')));
     });
+
+    it('claudeModels accepts fable as the opt-in ceiling model', () => {
+      const res = validateConfig({
+        intelligence: {
+          modelRouting: { claudeModels: { highRiskQA: 'fable' } },
+        },
+      });
+      assert.strictEqual(res.valid, true);
+      assert.deepStrictEqual(res.errors, []);
+    });
   });
 
   describe('resolveRoute', () => {

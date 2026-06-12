@@ -126,7 +126,7 @@ describe('high-risk path: competition, judges, adversarial lenses', () => {
     return approveReview
   }
 
-  test('risk:high → two CLIs compete, sonnet judges, three opus lenses', async () => {
+  test('risk:high → two CLIs compete, sonnet judges, security-opus + sonnet cascade lenses', async () => {
     const { result, calls } = await run(JSON.stringify(makeCfg([highTask])), happy)
     const impls = calls.filter(c => c.label.startsWith('impl:'))
     assert.equal(impls.length, 2)
@@ -135,9 +135,31 @@ describe('high-risk path: competition, judges, adversarial lenses', () => {
     assert.equal(judges.length, 2)
     assert.ok(judges.every(j => j.model === 'sonnet'))
     const lenses = calls.filter(c => c.label.startsWith('verify:'))
-    assert.equal(lenses.length, 3)
-    assert.ok(lenses.every(l => l.model === 'opus'))
+    assert.equal(lenses.length, 3, 'confident passes do not escalate — exactly one call per lens')
+    const lensModel = (lens) => lenses.find(l => l.label === `verify:h:${lens}`).model
+    assert.equal(lensModel('security'), 'opus', 'security is the asymmetric-risk lens — always the opus ceiling')
+    assert.equal(lensModel('correctness'), 'sonnet', 'correctness starts on sonnet, escalates only on doubt')
+    assert.equal(lensModel('regression'), 'sonnet', 'regression starts on sonnet, escalates only on doubt')
     assert.equal(result.approved.length, 1)
+  })
+
+  test('cascade: a borderline sonnet lens escalates to a second opus verdict (why: catch what sonnet is unsure about without paying opus on every lens)', async () => {
+    const { result, calls } = await run(JSON.stringify(makeCfg([highTask])), (l) => {
+      if (l.startsWith('impl:')) return okImpl()
+      if (l.startsWith('judge:')) return judgeScore()
+      if (l.startsWith('verify:')) {
+        // correctness comes back borderline (conf 50) on its sonnet first pass → must re-run on opus
+        if (l === 'verify:h:correctness') return passVerdict(50)
+        return passVerdict(90)
+      }
+      return approveReview
+    })
+    const firstPass = calls.find(c => c.label === 'verify:h:correctness')
+    assert.equal(firstPass.model, 'sonnet', 'correctness first pass runs on sonnet')
+    const escalated = calls.filter(c => c.label === 'verify:h:correctness:opus')
+    assert.equal(escalated.length, 1, 'borderline correctness lens re-runs once on opus')
+    assert.equal(escalated[0].model, 'opus')
+    assert.equal(result.approved.length, 1, 'the escalated opus verdict (conf 90) clears quorum and score')
   })
 
   test('complexity > 70 triggers competition even at routine risk', async () => {

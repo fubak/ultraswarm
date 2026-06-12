@@ -122,7 +122,8 @@ Two locations, **project overrides global**:
 - `promptAnalysis.enabled` — Enable complexity analysis and model routing
 - `complexityThresholds` — Scoring boundaries for model selection  
 - `taskGranularity` — Task decomposition strategy: `standard`, `fine`, `ultra-fine`
-- `claudeModels` — Which Claude model to use per orchestration phase
+- `claudeModels` — Which Claude model to use per orchestration phase (`haiku`, `sonnet`, `opus`, `fable`)
+- `maxIntelligence` — Opt-in (default false). Flips the ceiling slots — the always-on security adversarial lens and the expert-escalation review — and expert-tier decomposition from Opus to Fable. Fable is ≈30% more tokens (tokenizer) + premium price, so leave it off unless the work is safety-critical.
 
 **Multi-Model Overrides:**
 - `models.<complexity>` — Per-complexity model configuration for each CLI
@@ -228,7 +229,7 @@ Advanced interactive configuration builder supporting intelligence features and 
 
 ## Phase 0a — Intelligent Prompt Analysis (inline, pre-decomposition)
 
-**Use Sonnet for this phase** — complexity analysis requires strong reasoning. Switch to appropriate Claude model based on config `intelligence.modelRouting.promptAnalysis`.
+**Run this analysis on a strong model — this is the one place to spend, not save.** Complexity assessment and the decomposition that follows are the highest-leverage reasoning in the whole run; a bad split wastes far more downstream (wasted external-CLI runs + QA cycles) than the analysis itself costs. It runs inline on the session model (typically Opus); `intelligence.modelRouting.promptAnalysis` records the intended tier. **Opt-in ceiling:** when `intelligence.maxIntelligence` is set, dispatch Phase 0a/0 for expert-tier or very-large tasks to a Fable subagent (`Agent({ model: 'fable' })`) for the deepest decomposition — but Fable costs ≈30% more tokens (its tokenizer) plus premium pricing, so reserve it for genuinely hard decompositions only, never the default path.
 
 1. **Complexity Assessment**: Analyze the incoming task to determine:
    - **Domain complexity**: Technical depth required (1-10 scale)
@@ -441,54 +442,35 @@ const getTimeout = (t, cli) => {
   return cfg.timeouts?.[cliKey] ?? cfg.timeouts?.[validCli] ?? cfg.timeoutMs
 }
 
-const enhancedImplPrompt = (t, cli, attempt, feedback) => `You are an INTELLIGENT WRAPPER around an external coding CLI with dynamic model selection. You do NOT write feature code — only orchestration and housekeeping.
+const enhancedImplPrompt = (t, cli, attempt, feedback) => `You are a WRAPPER around the external CLI "${cli}". You do NOT write feature code — only run the CLI and report. Task ${t.id} (${t.model_tier} tier, attempt ${attempt}).
 
-TASK INTELLIGENCE:
-- Repo: ${cfg.repo} · Task: ${t.id} — ${t.description}
-- Complexity Score: ${t.complexity_score}/100 · Model Tier: ${t.model_tier}
-- CLI: ${cli} · Attempt: ${attempt} · Dependencies: ${t.dependencies?.join(', ') || 'none'}
-- Estimated Tokens: ${t.estimated_tokens} · Risk Level: ${t.risk}
-
-ENHANCED WORKFLOW:
-1. Worktree Setup: Create or reuse ${wt(t,cli)} with branch ${br(t,cli)}
+1. Worktree (create, or reuse if it exists):
    cd ${cfg.repo} && git worktree add ${wt(t,cli)} -b ${br(t,cli)} ${cfg.baseBranch}
-   
-2. Write enhanced prompt to ${wt(t,cli)}/.ultraswarm-prompt.txt:
----ENHANCED PROMPT START---
-TASK CONTEXT: ${t.description}
-COMPLEXITY: ${t.complexity_score}/100 (${t.model_tier} tier)
-FILES TO MODIFY: ${JSON.stringify(t.files)}
-DEPENDENCIES: ${t.dependencies?.join(', ') || 'Independent task'}
+
+2. Write ${wt(t,cli)}/.ultraswarm-prompt.txt with this self-contained task for the CLI:
+---PROMPT START---
+${t.description}
+Files to modify: ${JSON.stringify(t.files)}
 
 ${t.prompt}${feedback.length ? `
 
-ITERATIVE FEEDBACK (fix ALL issues):
+FIX ALL of these issues from prior attempts:
 ${feedback.map((f, i) => `${i+1}. ${f}`).join('\n')}` : ''}
+---PROMPT END---
 
-QUALITY REQUIREMENTS:
-- Code must pass all gates: ${cfg.gates.map(g => g.name).join(', ')}
-- Complexity target: ≤${cfg.intelligence?.maxComplexityPerTask ?? 15}/100
-- Token efficiency: Aim for ≤${t.estimated_tokens * 1.2} tokens
-- Follow established patterns in existing codebase
----ENHANCED PROMPT END---
-
-3. Execute CLI with intelligent timeout (${getTimeout(t, cli)}ms):
+3. Run the CLI (timeout ${getTimeout(t, cli)}ms):
    cd ${wt(t,cli)} && ${getCliCommand(t, cli)}
 
-4. Enhanced gate execution with performance tracking:
+4. Run the gates in the worktree:
    ${gateList}
 
-5. Intelligent artifact analysis:
-   - Parse model_used from CLI output (model name/tier actually used)
-   - Calculate complexity_achieved (actual complexity vs target)
-   - Track performance metrics (execution time, quality indicators)
-   - Identify concerns: scope violations, complexity overruns, pattern deviations
-
-6. Enhanced housekeeping and commit:
+5. Housekeeping + commit:
    rm ${wt(t,cli)}/.ultraswarm-prompt.txt
    cd ${wt(t,cli)} && git add -A && git commit -m "ultraswarm: ${t.id}/${t.model_tier} attempt ${attempt}"
 
-7. Return enhanced JSON schema with intelligence metrics.`
+6. Return the IMPL schema: status, worktree, branch, files_changed, gate_results, summary,
+   concerns (scope creep / pattern deviations), cli_tokens and model_used parsed from the CLI
+   output (0 / "default" when absent), complexity_achieved (your estimate vs ${t.complexity_score}/100 target).`
 
 // Enhanced QA prompts with intelligence and adaptive depth
 const adaptiveReviewPrompt = (t, impl) => `INTELLIGENT CODE REVIEW — Adaptive depth based on complexity score ${t.complexity_score}/100.
@@ -577,7 +559,7 @@ Provide confidence (0-100) in your verdict, and suggest alternative_approach onl
 const EXPERT_LENSES = ['correctness', 'security', 'regression']
 const ALLOWED_CLIS = ['codex', 'gemini', 'grok', 'agy', 'droid', 'opencode']
 const VALID_MODEL_TIERS = ['simple', 'moderate', 'complex', 'expert']
-const VALID_CLAUDE_MODELS = ['haiku', 'sonnet', 'opus']
+const VALID_CLAUDE_MODELS = ['haiku', 'sonnet', 'opus', 'fable']
 
 // Input validation functions
 function validateCliName(cli) {
@@ -722,14 +704,15 @@ async function runModerateQA(t, impl) {
   }
 }
 
-// Expert escalation QA: detailed analysis with Opus
+// Expert escalation QA: detailed analysis on the ceiling model (Opus, or Fable when maxIntelligence is opted in)
 async function runExpertEscalation(t, impl) {
   try {
+    const ceiling = cfg.intelligence?.maxIntelligence ? 'fable' : 'opus'
     const expert = await agent(adaptiveReviewPrompt(t, impl) + '\n\nEXPERT ESCALATION: Provide detailed analysis for complex edge cases.', { 
       label: `review:${t.id}:expert`, 
       phase: 'QA', 
       schema: ENHANCED_REVIEW_SCHEMA,
-      model: 'opus'
+      model: ceiling
     })
     return expert ? { approve: expert.approve, issues: expert.issues } : { approve: false, issues: ['expert review failed'] }
   } catch (error) {
@@ -737,17 +720,41 @@ async function runExpertEscalation(t, impl) {
   }
 }
 
-// High-risk adversarial QA: multi-lens expert review
+// High-risk adversarial QA: multi-lens expert review, FrugalGPT-style cascade.
+// security is the asymmetric-risk lens → always the ceiling model. correctness/regression
+// start on sonnet and escalate to the ceiling model only when they refute or return
+// borderline confidence — observe the verdict, escalate on doubt, instead of paying the
+// ceiling model on every lens up front.
+const LENS_BORDERLINE = 75
 async function runAdversarialQA(t, impl) {
   try {
-    const votes = (await parallel(EXPERT_LENSES.map(lens => () =>
-      agent(expertLensPrompt(lens, t, impl), { 
-        label: `verify:${t.id}:${lens}`, 
-        phase: 'QA', 
+    // ceiling = opus by default; fable only when maxIntelligence is opted in (see runExpertEscalation)
+    const ceiling = cfg.intelligence?.maxIntelligence ? 'fable' : 'opus'
+    const firstModel = lens => lens === 'security' ? ceiling : 'sonnet'
+
+    // First pass: security on the ceiling model, the rest on sonnet, all in parallel.
+    const firstPass = (await parallel(EXPERT_LENSES.map(lens => () =>
+      agent(expertLensPrompt(lens, t, impl), {
+        label: `verify:${t.id}:${lens}`,
+        phase: 'QA',
         schema: EXPERT_VERDICT_SCHEMA,
-        model: 'opus'
-      })))).filter(Boolean)
-    
+        model: firstModel(lens)
+      }).then(v => v && { lens, v })))).filter(Boolean)
+
+    // Escalate any sonnet lens that refuted or is borderline to the ceiling model for a
+    // final verdict; keep the sonnet verdict if the escalated agent dies.
+    const votes = (await parallel(firstPass.map(({ lens, v }) => async () => {
+      if (firstModel(lens) === ceiling) return v
+      if (!v.refuted && v.confidence >= LENS_BORDERLINE) return v
+      const escalated = await agent(expertLensPrompt(lens, t, impl), {
+        label: `verify:${t.id}:${lens}:${ceiling}`,
+        phase: 'QA',
+        schema: EXPERT_VERDICT_SCHEMA,
+        model: ceiling
+      })
+      return escalated || v
+    }))).filter(Boolean)
+
     // Quorum guard: a high-risk task must never pass without at least 2 lens votes
     if (votes.length < 2) {
       return { approve: false, issues: [`adversarial verification could not complete (${votes.length}/${EXPERT_LENSES.length} lens agents responded)`] }
@@ -1031,9 +1038,9 @@ return {
 
 Notes: the high-risk branch is terminal — attempt 1 is a two-CLI competition; the judged winner (or the primary, when no competitor passes attempt 1) gets 2 feedback retries (attempts 2–3) on its own CLI/worktree, then that CLI's alternate gets 2 attempts (4–5), then the task tombstones as `{task, failed: true}`. Routine tasks get 3 attempts on the primary, then 2 on the alternate (attempts 4–5), then the same tombstone. `attemptLoop` returns `{exhausted: true, feedback}` on exhaustion, so all rejection feedback — QA issues and failing-gate details — accumulates and is carried into the alternate CLI's prompts along with a reassignment note. In the high-risk path the alternate may resume in its own competition worktree rather than a fresh one — deliberate: it has its own branch, committed history, and the carried feedback. Both branches return through the same shape; a task that exhausts every path comes back as `{task, failed: true}` — never silently dropped.
 
-## Phase 3 — Intelligent Merge (inline, orchestrator Claude, after each wave's Workflow returns)
+## Phase 3 — Intelligent Merge (orchestrator Claude, after each wave's Workflow returns)
 
-**Use Haiku for merge operations** — cost-efficient for mechanical operations. Switch to Sonnet for conflict resolution requiring judgment.
+**Delegate the mechanical merge to a Haiku subagent — do NOT run it in the main loop.** The orchestrator's own model is the *session* model (e.g. Opus), and a skill cannot downshift its own main-loop model, so merging inline pays Opus rates for mechanical work. Instead, for each approved task spawn an `Agent({ model: 'haiku' })` that performs that one task's squash-merge + full gate run and reports pass/fail back. The orchestrator sequences the tasks (dependency-ordered) and inspects each result before the next. **Escalate to `Agent({ model: 'sonnet' })` only when a merge conflicts** — conflict resolution is Rule 7 judgment (pick, don't blend) and belongs on the stronger model. (A `claudeModels` config block can override these per-phase model choices.)
 
 1. **Dependency-aware merge sequence**: Use task dependency graph to determine safe merge order. Dependencies must be merged before dependents.
 
@@ -1076,7 +1083,7 @@ git commit -m "feat: <task_summary> (ultraswarm: <cli>/<model_tier>, complexity:
 
 ## Phase 4 — Enhanced Verification & Intelligence Report
 
-**Use Haiku for reporting** — cost-efficient for structured output generation.
+**Delegate report generation to a Haiku subagent** (`Agent({ model: 'haiku' })`) rather than writing it in the main loop — structured-table output is mechanical and shouldn't run at the session model's (Opus) rate. Hand the subagent the per-task results, model-usage map, and token accounting; it formats the tables and prose below. (The orchestrator still runs the final full-suite verification itself before handing off.)
 
 1. **Comprehensive final verification**:
    - Full test suite with coverage analysis (maintain 80%+ target)

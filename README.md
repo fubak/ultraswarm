@@ -49,7 +49,7 @@ flowchart TD
     subgraph wf [" Enhanced Workflow — intelligent orchestration "]
         direction TB
         P1["<b>Phase 1 · Intelligent Implement</b><br/>dynamic model selection per complexity<br/>dependency-aware coordination<br/>model escalation on retries<br/>competition for high-risk/complex tasks"]
-        P2["<b>Phase 2 · Adaptive QA</b><br/>simple: Haiku review<br/>moderate: Sonnet analysis<br/>complex/high-risk: Opus adversarial<br/>confidence scoring + expert escalation"]
+        P2["<b>Phase 2 · Adaptive QA</b><br/>simple: Haiku review<br/>moderate: Sonnet analysis<br/>complex/high-risk: Sonnet→Opus adversarial cascade<br/>confidence scoring + expert escalation"]
         P1 --> P2
     end
     CONF -- yes --> P1
@@ -81,7 +81,7 @@ External CLIs use precisely-matched models for each task complexity. Simple task
 Advanced task decomposition breaks work into atomic units (≤15/100 complexity each) with dependency analysis. More tasks can run in parallel, reducing wall-clock time and enabling better resource utilization.
 
 ### 🎯 **Adaptive Quality Assurance** 
-QA depth scales intelligently: Haiku reviews for simple tasks, Sonnet for moderate complexity, Opus adversarial analysis for high-risk work. Quality is enforced where it matters, efficiency where it doesn't.
+QA depth scales intelligently: Haiku reviews for simple tasks, Sonnet for moderate complexity, and a Sonnet→Opus adversarial cascade for high-risk work (the security lens always runs on Opus; correctness/regression escalate only on doubt). Quality is enforced where it matters, efficiency where it doesn't.
 
 ### 📊 **Comprehensive Intelligence**
 Real-time complexity tracking, model efficiency metrics, parallelization analysis, and cost optimization insights. Full transparency into what models were used, why, and how effectively.
@@ -268,7 +268,7 @@ QA depth is **adaptive** — it scales with both risk and complexity, so trivial
 
 **High-risk tasks** (anything touching auth/security/payments, shared interfaces or data models, architectural changes, or logic with no existing test coverage — plus any task scoring >70 complexity):
 - Two CLIs implement the *same* task in parallel worktrees; a Sonnet **judge panel** scores correctness / model efficiency / complexity handling and the winner advances.
-- The winner faces a **3-lens Opus adversarial verify** — *correctness*, *security* (secret/injection/authz/leak checks), and *regression* lenses, each prompted to **refute** the work with explicit verdict-polarity rules. Approval requires a hard **quorum of ≥2 lens votes**, a confidence-weighted score ≥60, and **zero critical refutations** — a single `severity: critical` finding fails the task no matter how confident the other lenses are.
+- The winner faces a **3-lens adversarial verify** — *correctness*, *security* (secret/injection/authz/leak checks), and *regression* lenses, each prompted to **refute** the work with explicit verdict-polarity rules. The lenses run as a cost-aware cascade: the **security** lens always runs on **Opus** (asymmetric risk), while *correctness* and *regression* run on **Sonnet** first and escalate to **Opus** only when they refute or return borderline confidence. Approval requires a hard **quorum of ≥2 lens votes**, a confidence-weighted score ≥60, and **zero critical refutations** — a single `severity: critical` finding fails the task no matter how confident the other lenses are. (With `intelligence.maxIntelligence` enabled, the Opus ceiling becomes Fable.)
 
 **When QA rejects:** the task retries on the *same* CLI with the reviewer's concrete feedback appended **and the model tier escalated** (simple→moderate→complex→expert), so the next attempt is both better-informed and better-equipped. If it exhausts retries, it reassigns to an alternate CLI carrying the accumulated feedback *and* the escalated tier. If every path is exhausted, the task tombstones as failed — and Claude either implements it directly (flagged) or reports it, never silently drops it.
 
