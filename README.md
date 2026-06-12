@@ -50,7 +50,7 @@ flowchart TD
     subgraph wf [" Enhanced Workflow — intelligent orchestration "]
         direction TB
         P1["<b>Phase 1 · Intelligent Implement</b><br/>dynamic model selection per complexity<br/>dependency-aware coordination<br/>model escalation on retries<br/>competition for high-risk/complex tasks"]
-        P2["<b>Phase 2 · Adaptive QA</b><br/>simple: Haiku review<br/>moderate: Sonnet analysis<br/>complex/high-risk: Sonnet→Opus adversarial cascade<br/>confidence scoring + expert escalation"]
+        P2["<b>Phase 2 · Adaptive QA</b><br/>simple/moderate (≤50): Haiku review<br/>complex (>50): Sonnet analysis<br/>high-risk: Sonnet→Opus adversarial cascade<br/>confidence scoring + expert escalation"]
         P1 --> P2
     end
     CONF -- yes --> P1
@@ -82,7 +82,7 @@ External CLIs use precisely-matched models for each task complexity. Simple task
 Advanced task decomposition breaks work into atomic units (≤15/100 complexity each) with dependency analysis. More tasks can run in parallel, reducing wall-clock time and enabling better resource utilization.
 
 ### 🎯 **Adaptive Quality Assurance** 
-QA depth scales intelligently: Haiku reviews for simple tasks, Sonnet for moderate complexity, and a Sonnet→Opus adversarial cascade for high-risk work (the security lens always runs on Opus; correctness/regression escalate only on doubt). Quality is enforced where it matters, efficiency where it doesn't.
+QA depth scales intelligently: Haiku reviews for simple and moderate tasks (≤50 complexity), Sonnet for complex tasks (>50), and a Sonnet→Opus adversarial cascade for high-risk work (the security lens always runs on Opus; correctness/regression escalate only on doubt). Quality is enforced where it matters, efficiency where it doesn't.
 
 ### 📊 **Comprehensive Intelligence**
 Real-time complexity tracking, model efficiency metrics, parallelization analysis, and cost optimization insights. Full transparency into what models were used, why, and how effectively.
@@ -195,11 +195,38 @@ Your working branch is only ever touched in step 4, and only by approved, gate-p
 
 Claude Code is the **primary host** — `/ultraswarm` runs the full Workflow-native pipeline with live progress and resume. A standalone Node runner (`bin/ultraswarm.mjs`) lets **Codex CLI, Grok CLI, or a bare shell** host the same swarm.
 
-**The model:** the host decomposes (it has repo access), the runner executes. The host writes a validated plan JSON and hands it to the runner:
+**The model:** the host agent decomposes the task (it has repo access), the runner executes. Claude Code stays the highest-fidelity host; the standalone runner trades the live `/workflows` UI for portability.
 
-    node bin/ultraswarm.mjs --plan-file plan.json --yes
+### Setup (once)
 
-The plan is `{"tasks":[{id,description,files,cli,model_tier,complexity_score,risk,dependencies,prompt}]}`; the runner validates it (rejecting unknown CLIs, bad tiers, dependency cycles, and unsafe task ids) then runs waves → implement → adaptive QA → merge → report. For a bare shell with no host agent, `--decompose "<task>"` does a single lower-fidelity decomposition (no repo exploration). The `hosts/codex/AGENTS.md` and `hosts/grok/ultraswarm.md` launchers tell those agents to decompose → `--plan-file` → relay the report.
+```bash
+git clone https://github.com/fubak/ultraswarm.git ~/projects/ultraswarm
+cd ~/projects/ultraswarm && npm install      # the runner has deps (ajv, @anthropic-ai/sdk)
+```
+
+The runner needs **Node ≥20**, **≥2 authenticated worker CLIs** (codex/gemini/grok/agy/droid/opencode — same roster as the skill), and a **brain** (defaults to your local authenticated `claude` CLI — no API key; see *Cost & auth* below).
+
+### Run it directly (any shell)
+
+```bash
+cd <your-git-repo>
+# let the runner decompose for you (single-shot, lower fidelity):
+node ~/projects/ultraswarm/bin/ultraswarm.mjs --decompose "add a rate limiter with unit tests" --yes
+# …or hand it a plan you wrote yourself:
+node ~/projects/ultraswarm/bin/ultraswarm.mjs --plan-file plan.json --yes
+```
+
+Flags: `--plan-file <json>` (host-supplied plan) · `--decompose "<task>"` (built-in fallback decomposer) · `--yes` (execute; omit to print the plan and stop) · `--resume <id>` (resume a stopped run from its journal under `.ultraswarm/`).
+
+### From Codex
+
+Copy `hosts/codex/AGENTS.md` into your repo — Codex reads `AGENTS.md` from the working directory. Then ask Codex to *"run an ultraswarm swarm to &lt;task&gt;"*: it explores the repo, writes `.ultraswarm-plan.json`, shows you the plan, and on approval runs the `--plan-file` command above and relays the report. It never writes the feature code itself.
+
+### From Grok (or any other agent)
+
+Give Grok the contents of `hosts/grok/ultraswarm.md` as its instructions — same flow: decompose → `.ultraswarm-plan.json` → `--plan-file` → relay. Any agent that can run a shell command can host the runner this way.
+
+**The plan format** is `{"tasks":[{id,description,files,cli,model_tier,complexity_score,risk,dependencies,prompt}]}` (`cli` ∈ codex/gemini/grok/agy/droid/opencode; task `id` limited to `[A-Za-z0-9._-]`). The runner **validates** it — rejecting unknown CLIs, bad tiers, dependency cycles, and unsafe task ids — then runs waves → implement → adaptive QA → merge → report, exactly like the skill.
 
 **Cost & auth (read this):** the standalone runner's QA brain defaults to the **local `claude` CLI** (`claude -p`), so if your machine already has an authenticated Claude Code install, **no API key is needed** — the brain reuses your Claude Code auth and billing, exactly like the `/ultraswarm` path. If `claude` isn't on `PATH`, the runner falls back to the raw **Anthropic API**, which needs `ANTHROPIC_API_KEY` and bills API tokens per call. Force either with `ULTRASWARM_BRAIN=claude-cli` or `ULTRASWARM_BRAIN=anthropic-api`. Either way, each worker CLI still needs its own auth. Claude Code remains the highest-fidelity host (native live UI + resume).
 
@@ -261,7 +288,7 @@ Tasks are routed to CLIs by specialty, then to a **model tier within that CLI** 
 | **grok** | Tests, refactors, general | grok-build → grok-composer-2.5-fast | ✅ live-verified v2.1 e2e |
 | **agy** | Docs, boilerplate, general | gemini-2.5-flash → gemini-2.5-pro | ✅ verified |
 | **droid** | General full-stack implementation, refactoring | claude-haiku-4-5 → claude-opus-4-8 | ✅ enabled (needs a Factory subscription; help-verified) |
-| **opencode** | Junior tier: boilerplate, lint/type fixes, simple tests, JSDoc | xai/grok-build-0.1 → xai/grok-4.20-reasoning | ✅ live-verified v2.1 e2e |
+| **opencode** | Junior tier: boilerplate, lint/type fixes, simple tests, JSDoc | xai/grok-build-0.1 → xai/grok-4.20-0309-reasoning | ✅ live-verified v2.1 e2e |
 
 **Routing isn't rigid.** For `high`-risk tasks, ultraswarm sends the *same* task to two CLIs in parallel worktrees and a judge panel picks the winner — independent attempts beat one-attempt-and-hope when the task is risky. Routine tasks go to a single CLI, and a failed attempt escalates the model tier before retrying.
 
@@ -279,7 +306,7 @@ QA depth is **adaptive** — it scales with both risk and complexity, so trivial
 
 **Routine tasks:**
 - Mechanical gates (build / typecheck / test / lint) run inside the worktree.
-- One Claude review agent reads the diff — Haiku for simple tasks (complexity ≤30), Sonnet above that — and checks: acceptance criteria actually met, conventions followed, no scope creep, no silently swallowed errors, tests verify intent rather than hardcoded outputs. A reviewer that flags `requires_expert_review` escalates the diff to an Opus second pass.
+- One Claude review agent reads the diff — Haiku for simple and moderate tasks (complexity ≤50), Sonnet for complex tasks (>50) — and checks: acceptance criteria actually met, conventions followed, no scope creep, no silently swallowed errors, tests verify intent rather than hardcoded outputs. A reviewer that flags `requires_expert_review` escalates the diff to an Opus second pass.
 
 **High-risk tasks** (anything touching auth/security/payments, shared interfaces or data models, architectural changes, or logic with no existing test coverage — plus any task scoring >70 complexity):
 - Two CLIs implement the *same* task in parallel worktrees; a Sonnet **judge panel** scores correctness / model efficiency / complexity handling and the winner advances.
@@ -415,11 +442,11 @@ git branch --list 'ultraswarm/*' | xargs -r git branch -D
 
 ## Limitations & status
 
-Honest current state (live-validated 2026-06-10/11 on the v2.1 pipeline):
+Honest current state. The orchestration pipeline was live-validated end-to-end on **v2.1** (2026-06-10/11); **v2.2–v2.3** then added the behavior-test harness, the Claude-model token optimization (real per-phase routing + the adversarial-QA cascade), and the **standalone host runner** (`bin/` + `lib/`, with a `claude -p` brain so it needs no API key — see [Running from other hosts](#running-from-other-hosts-codex--grok--shell)). Current plugin version: **2.3.0**.
 
-- **Live-validated end-to-end (v2.1):** a real multi-task run built this repo's own model-router module (`scripts/router.mjs` + tests + CI wiring): high-risk **competition → Sonnet judge panel → 3-lens Opus adversarial QA** with feedback retries and **model escalation** (gpt-5.4→gpt-5.5), routine simple-tier tasks approved first attempt, **dependency-wave chaining** with per-wave merges, and **resume-from-checkpoint** recovering a stopped run mid-flight with zero re-spent external tokens. A follow-up single-task run on the installed plugin validated the routine path catching real escaping bugs in review.
+- **Live-validated end-to-end (v2.1):** a real multi-task run built this repo's own model-router module (`scripts/router.mjs` + tests + CI wiring): high-risk **competition → Sonnet judge panel → 3-lens adversarial QA** (since v2.3 a cost-aware cascade: security on Opus, correctness/regression on Sonnet escalating to Opus on doubt) with feedback retries and **model escalation** (gpt-5.4→gpt-5.5), routine simple-tier tasks approved first attempt, **dependency-wave chaining** with per-wave merges, and **resume-from-checkpoint** recovering a stopped run mid-flight with zero re-spent external tokens. A follow-up single-task run on the installed plugin validated the routine path catching real escaping bugs in review.
   - **codex** needs specific flags — `codex exec -s workspace-write --skip-git-repo-check '<prompt>' </dev/null` — because its default sandbox rejects worktree writes and bare `exec` hangs on stdin. It's also **slow (~5+ min/task)**, so it runs with a 15-min timeout. The registry encodes all of this.
-- **Enabled but not smoke-tested here:** **droid** — requires an active Factory subscription. The test machine had no plan, so `droid exec` returned 0 turns / 0 tokens (consistent with no model access, not a CLI defect). On a subscribed machine, Phase 0's write probe verifies it before routing. Its tier model IDs (`claude-haiku-4-5`/`claude-sonnet-4-6`) are best-known; only the `claude-opus-4-8` default is confirmed.
+- **Enabled but not smoke-tested here:** **droid** — requires an active Factory subscription. The test machine had no plan, so `droid exec` returned 0 turns / 0 tokens (consistent with no model access, not a CLI defect). On a subscribed machine, Phase 0's write probe verifies it before routing. All four tier model IDs (`claude-haiku-4-5` → `claude-sonnet-4-6` → `claude-opus-4-8`) are in the registry; the test machine just couldn't exercise them without a Factory plan.
 - **Token capture is partial.** Only **codex** (and droid in JSON mode) reliably emit a parseable token count; grok reports intermittently; gemini/opencode/agy report none. The report shows a `captured/total` coverage fraction and treats the external-token figure as an undercount, never a precise "tokens saved."
 - **Cost calibration (measured):** a routine task that passes first attempt costs roughly **70–80k Claude tokens** of orchestration + QA; one QA-rejection retry roughly doubles that; the high-risk competition path runs **~250–550k**. Budget 2–3× the first-attempt figure whenever a rejection is plausible.
 - **Local only** — no remote/CI execution of the swarm itself. Everything runs in local worktrees. (The repo's *validator* runs in CI; the swarm does not.)
@@ -435,20 +462,36 @@ ultraswarm/
 ├── README.md                                   ← you are here
 ├── CHANGELOG.md                                ← release history
 ├── LICENSE                                     ← MIT
+├── package.json · package-lock.json            ← deps for the standalone runner (ajv, @anthropic-ai/sdk)
 ├── ultraswarm.config.example.json              ← starter CLI-selection config (minimal)
 ├── ultraswarm.config.advanced.json             ← full intelligence config, verified model IDs
+├── skills/ultraswarm/SKILL.md                  ← the Claude Code skill (canonical orchestrator)
+├── bin/
+│   └── ultraswarm.mjs                          ← standalone runner CLI (--plan-file / --decompose / --resume)
+├── lib/                                         ← standalone runner internals (shares the pure core with the skill)
+│   ├── engine.mjs                              ← Node Workflow primitives (parallel / pipeline / limiter)
+│   ├── validate.mjs · plan-schema.mjs          ← ajv validation + the host→runner plan contract
+│   ├── prompts.mjs                             ← shared QA prompt templates + schemas (lifted from SKILL.md)
+│   ├── journal.mjs                             ← run journal backing --resume
+│   ├── llm/{client,anthropic,claude-cli,brain-router}.mjs   ← brain adapters (claude -p default, API fallback)
+│   └── orchestrator/{waves,implement,merge,report,runner,core,decompose}.mjs
+├── hosts/
+│   ├── codex/AGENTS.md                         ← Codex launcher (decompose → --plan-file)
+│   └── grok/ultraswarm.md                      ← Grok launcher
+├── fixtures/fake-cli.mjs                        ← test fixture: a fake worker CLI
 ├── scripts/
 │   ├── validate.sh                             ← release validator, 12 checks (supports --json)
 │   ├── router.mjs                              ← model router: loadConfig / validateConfig / resolveRoute
-│   ├── router.test.mjs                         ← 17-case node:test suite for the router
-│   └── workflow-harness.test.mjs               ← behavior tests for the embedded Workflow JS
-├── .github/workflows/validate.yml              ← CI: runs validate.sh on every push/PR
+│   ├── router.test.mjs                         ← 18-case node:test suite for the router
+│   ├── workflow-harness.test.mjs               ← behavior tests for the embedded Workflow JS
+│   └── smoke-brain.mjs                          ← key-gated Anthropic-API smoke check
+├── .github/workflows/validate.yml              ← CI: npm ci + validate.sh on every push/PR
 ├── .claude-plugin/
 │   ├── plugin.json                             ← plugin manifest
 │   └── marketplace.json                        ← single-plugin marketplace listing
-├── skills/ultraswarm/SKILL.md                  ← the skill (canonical source)
 └── docs/
-    ├── specs/2026-06-07-ultraswarm-design.md   ← approved design spec
+    ├── specs/2026-06-07-ultraswarm-design.md            ← original design spec
+    ├── specs/2026-06-12-portable-host-runner-design.md  ← standalone runner design
     ├── plans/                                  ← implementation plans (historical)
     └── notes/cli-verification.md               ← verified CLI invocations, quirks, e2e findings
 ```
