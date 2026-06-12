@@ -1,7 +1,7 @@
 {
   "name": "ultraswarm",
   "description": "Advanced AI orchestration with intelligent prompt analysis, dynamic model routing, and ultra-granular task decomposition. Optimizes external CLI usage with complexity-based model selection and adaptive QA for maximum efficiency.",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "author": {
     "name": "Fubak"
   },

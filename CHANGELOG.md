@@ -4,6 +4,37 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [2.4.1] — 2026-06-12
+
+Runner hardening: the standalone runner now works end-to-end through its CLI entry
+path, with every runner issue (#6–#12) closed and the `bin` seam under test. Started
+from a grok-CLI WIP branch that made the runner executable; this finishes the job.
+
+### Fixed
+- **#6** — `--decompose` now produces valid plans (`model_tier`/`risk` enums + CLI roster
+  in the prompt, plus normalization of brain output so `model_tier:"haiku"`→`simple`,
+  `risk:"low"`→`routine`). The documented `enabled`+`overrides` config shape resolves
+  worker commands via `resolveRoute` (no hand-crafted `registry` needed).
+- **#7** — external workers receive the clean task prompt, not the orchestration wrapper.
+- **#8** — worker launch failures are classified (auth/transport/not-installed/timeout)
+  with actionable hints (e.g. ``worker grok failed (auth) — run `grok login` ``); the
+  worktree-auth limitation is documented.
+- **#9** — no-op / scaffolding-only worker output can no longer pass review or merge.
+- **#10** — dependents of a failed task are reported `blocked (dependency X did not
+  merge)` and never run blind; blocking cascades across waves.
+- **#11** — reports show per-task attempts, a merged/failed/blocked summary with a success
+  rate, and token-capture coverage.
+- **#12** — host scaffolding (`.ultraswarm-plan.json`, local config, `.ultraswarm/`,
+  `.grok/`) no longer leaks into feature commits (`mergeWave` drops the redundant
+  `git add -A`; `.gitignore` updated).
+- **Silent-task-loss guard** — an unknown CLI returns a loud `cli_failed` instead of
+  throwing (which `pipeline()` would swallow); `bin` prints a clean error + exit 1 on an
+  invalid plan instead of an unhandled-rejection stack trace.
+
+### Added
+- End-to-end-through-`bin` seam tests (the coverage the v2.4.0 break slipped through),
+  +13 tests overall (96 total).
+
 ## [2.4.0] — 2026-06-12
 
 Portability release: a standalone runner lets Codex, Grok, or a bare shell host
