@@ -1,3 +1,5 @@
 node_modules/
 .ultraswarm/
+.ultraswarm-plan.json
+.grok/
 *.log
