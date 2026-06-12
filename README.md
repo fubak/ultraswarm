@@ -2,7 +2,12 @@
 
 **Intelligent orchestration of external AI coding CLIs — complexity-routed models, isolated git worktrees, adversarial QA, Claude-only merge.**
 
-`ultraswarm` is a [Claude Code](https://claude.com/claude-code) plugin providing the `/ultraswarm` skill. Claude analyzes your task's complexity, decomposes it into atomic units, and routes each to the best external CLI (codex, gemini, grok, agy, droid, opencode) *and* the right model tier within that CLI — fast/cheap models for simple work, powerful models for complex work, with automatic escalation when an attempt fails QA. Dependent tasks run as chained Workflow waves, each re-based on the merged result of the wave before it. Claude never writes feature code; it decomposes, reviews, judges, merges, and reports.
+`ultraswarm` orchestrates a swarm of external AI coding CLIs (codex, gemini, grok, agy, droid, opencode). It analyzes your task's complexity, decomposes it into atomic units, routes each to the best CLI *and* the right model tier within that CLI — fast/cheap models for simple work, powerful models for complex work, with automatic escalation when an attempt fails QA — runs them in isolated git worktrees, QA-reviews every diff, and merges only what passes. Dependent tasks run as chained waves, each re-based on the merged result of the wave before it. The orchestrator never writes feature code; it decomposes, reviews, judges, merges, and reports.
+
+**Run it two ways** (same orchestration core, identical behaviour):
+
+- **As a [Claude Code](https://claude.com/claude-code) skill** — `/ultraswarm <task>`. Native Workflow engine with live `/workflows` progress and resume. → [Installation](#installation) · [Usage](#usage)
+- **As a standalone CLI** — `node bin/ultraswarm.mjs …`, **hosted from Codex, Grok, or any shell — no Claude Code required**. → [Running from any CLI](#running-from-any-cli-codex--grok--shell)
 
 As of v2.1 the full pipeline is **live-validated end-to-end**: competition + judge panel + 3-lens adversarial QA, model escalation, dependency waves, and resume-from-checkpoint have all been exercised on real multi-task runs (the swarm built this repo's own config validator as its test workload).
 
@@ -17,7 +22,7 @@ As of v2.1 the full pipeline is **live-validated end-to-end**: competition + jud
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Usage](#usage)
-- [Running from other hosts (Codex / Grok / shell)](#running-from-other-hosts-codex--grok--shell)
+- [Running from any CLI (Codex / Grok / shell)](#running-from-any-cli-codex--grok--shell)
 - [Choosing which CLIs to use](#choosing-which-clis-to-use)
 - [The worker registry](#the-worker-registry)
 - [The QA model](#the-qa-model)
@@ -99,9 +104,10 @@ Enhanced failure analysis with complexity reassessment, model tier recommendatio
 
 ## Prerequisites
 
-- **Claude Code** with the Workflow tool available (this is what powers `ultracode`).
-- **A git repository.** ultraswarm works exclusively through git worktrees. Worktrees are created under `~/worktrees/` by default.
-- **At least two healthy external coding CLIs.** ultraswarm needs ≥2 working CLIs or it stops (it will not silently fall back to Claude coding everything). Install and authenticate the ones you want:
+**Common to both run modes:**
+
+- **A git repository.** ultraswarm works exclusively through git worktrees (created under `~/worktrees/` by default).
+- **At least two healthy external coding CLIs.** ultraswarm needs ≥2 working CLIs or it stops (it will not silently fall back to the orchestrator coding everything). Install and authenticate the ones you want:
 
   | CLI | Install (typical) | Auth |
   |---|---|---|
@@ -112,7 +118,17 @@ Enhanced failure analysis with complexity reassessment, model tier recommendatio
   | [droid](https://factory.ai/product/cli) | Factory CLI (`droid`) | Sign in to Factory (requires an active subscription) |
   | [opencode](https://opencode.ai/docs/#install) | `npm i -g opencode-ai` (see install docs) | provider key (e.g. xAI) |
 
-  You don't need all six. The skill health-checks and write-probes whatever is installed and routes only to the ones that pass. See [Limitations & status](#limitations--status) for which CLIs are currently verified.
+  You don't need all six. ultraswarm health-checks and write-probes whatever is installed and routes only to the ones that pass. See [Limitations & status](#limitations--status) for which CLIs are currently verified.
+
+**For the Claude Code skill** (`/ultraswarm`):
+
+- **Claude Code** with the Workflow tool available. → [Installation](#installation)
+
+**For the standalone runner** (`bin/ultraswarm.mjs`, hosted from Codex / Grok / shell — no Claude Code needed):
+
+- **Node ≥20**, and the repo checked out + `npm install`'d (it has deps).
+- **A brain** for the QA/decompose reasoning — *either* your local authenticated `claude` CLI (default, **no API key**) *or* `ANTHROPIC_API_KEY` for the Anthropic API.
+- → [Running from any CLI](#running-from-any-cli-codex--grok--shell)
 
 ---
 
@@ -191,11 +207,11 @@ Your working branch is only ever touched in step 4, and only by approved, gate-p
 
 ---
 
-## Running from other hosts (Codex / Grok / shell)
+## Running from any CLI (Codex / Grok / shell)
 
-Claude Code is the **primary host** — `/ultraswarm` runs the full Workflow-native pipeline with live progress and resume. A standalone Node runner (`bin/ultraswarm.mjs`) lets **Codex CLI, Grok CLI, or a bare shell** host the same swarm.
+You do **not** need Claude Code to run ultraswarm. The standalone runner `bin/ultraswarm.mjs` lets **Codex CLI, Grok CLI, or a bare shell** host the same swarm — same orchestration core, identical behaviour. (The Claude Code `/ultraswarm` skill is the other way to run it; it adds a live `/workflows` UI and native resume, but the pipeline is the same.)
 
-**The model:** the host agent decomposes the task (it has repo access), the runner executes. Claude Code stays the highest-fidelity host; the standalone runner trades the live `/workflows` UI for portability.
+**How it works:** the host agent decomposes the task into a plan (it has repo access), then the runner executes it — waves → implement → adaptive QA → merge → report. The runner brings its own "brain" for the QA/decompose reasoning: by default your local `claude` CLI (no API key — see *Cost & auth*), or the Anthropic API as a fallback.
 
 ### Setup (once)
 
@@ -442,7 +458,7 @@ git branch --list 'ultraswarm/*' | xargs -r git branch -D
 
 ## Limitations & status
 
-Honest current state. The orchestration pipeline was live-validated end-to-end on **v2.1** (2026-06-10/11); **v2.2–v2.3** then added the behavior-test harness, the Claude-model token optimization (real per-phase routing + the adversarial-QA cascade), and the **standalone host runner** (`bin/` + `lib/`, with a `claude -p` brain so it needs no API key — see [Running from other hosts](#running-from-other-hosts-codex--grok--shell)). Current plugin version: **2.3.0**.
+Honest current state. The orchestration pipeline was live-validated end-to-end on **v2.1** (2026-06-10/11); **v2.2–v2.3** added the behavior-test harness and the Claude-model token optimization (real per-phase routing + the adversarial-QA cascade); **v2.4** added the **standalone host runner** (`bin/` + `lib/`, with a `claude -p` brain so it needs no API key — see [Running from any CLI](#running-from-any-cli-codex--grok--shell)). Current plugin version: **2.4.0**.
 
 - **Live-validated end-to-end (v2.1):** a real multi-task run built this repo's own model-router module (`scripts/router.mjs` + tests + CI wiring): high-risk **competition → Sonnet judge panel → 3-lens adversarial QA** (since v2.3 a cost-aware cascade: security on Opus, correctness/regression on Sonnet escalating to Opus on doubt) with feedback retries and **model escalation** (gpt-5.4→gpt-5.5), routine simple-tier tasks approved first attempt, **dependency-wave chaining** with per-wave merges, and **resume-from-checkpoint** recovering a stopped run mid-flight with zero re-spent external tokens. A follow-up single-task run on the installed plugin validated the routine path catching real escaping bugs in review.
   - **codex** needs specific flags — `codex exec -s workspace-write --skip-git-repo-check '<prompt>' </dev/null` — because its default sandbox rejects worktree writes and bare `exec` hangs on stdin. It's also **slow (~5+ min/task)**, so it runs with a 15-min timeout. The registry encodes all of this.
