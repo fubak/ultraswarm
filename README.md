@@ -436,6 +436,9 @@ Install/authenticate more CLIs. Check each manually: `<cli> --version`, then con
 **A CLI passes `--version` but every task it gets fails.**
 This is exactly why the write probe exists. Some sandboxed CLIs reject all file writes inside *linked git worktrees* even though they run fine in a normal repo (codex did this until its registry invocation gained `-s workspace-write`). ultraswarm drops these in Phase 0; if you see it happen, that CLI needs a sandbox/config fix before it can be a worker.
 
+**Standalone runner: a worker reports `worker <cli> failed (auth)` or `(transport)`.**
+Some worker CLIs (notably `grok` under a TUI host) die immediately when launched from a *linked worktree* with `Auth(AuthorizationRequired)` or transport/MCP/DNS errors, even though they work interactively. The runner classifies these so the report says e.g. `worker grok failed (auth) — run \`grok login\``. Fixes: authenticate the CLI in a plain shell first (`<cli> login`), prefer worker CLIs that run headlessly from worktrees (codex with `-s workspace-write`, opencode), or pin a known-good invocation in `overrides`. High-risk tasks already fall back to an alternate CLI; for routine tasks, swap the task's `cli` to a working one.
+
 **A task hangs for its entire timeout and produces nothing.**
 Check the model ID in your config. An invalid model name does **not** fail fast — codex in particular hangs until the wrapper kills it. Run the CLI's model listing (`opencode models`, `grok models`) and compare against your `overrides`; `validateConfig` in `scripts/router.mjs` catches structural problems but cannot know whether a well-formed ID actually exists on your account.
 
