@@ -275,6 +275,19 @@ else
   fi
 fi
 
+# --- Check 12: Standalone runner + lib module syntax -------------------------
+begin_check 12 "Standalone runner and lib modules parse (node --check)"
+syntax_fail=""
+for f in "$ROOT/bin/ultraswarm.mjs" $(find "$ROOT/lib" -name '*.mjs' | sort); do
+  if ! node --check "$f" 2>/dev/null; then
+    fail "syntax error in $f"
+    syntax_fail=yes
+  fi
+done
+if [ -z "$syntax_fail" ]; then
+  pass "bin/ultraswarm.mjs and all lib/**/*.mjs pass node --check"
+fi
+
 # --- Summary ------------------------------------------------------------------
 if [ "$JSON_MODE" -eq 1 ]; then
   node -e '
