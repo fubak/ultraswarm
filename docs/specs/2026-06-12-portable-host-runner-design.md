@@ -26,6 +26,8 @@ swarm, without giving up Claude Code as the primary, highest-fidelity host.
 | Orchestrator brain | **Anthropic / Claude models** (haiku/sonnet/opus/fable), behind a provider abstraction so others *can* slot in later — but Claude is the default and primary |
 | Convergence | **Keep both orchestrators**, sharing a **pure core** (registry, prompts, algorithms); each host supplies its own thin primitives layer |
 | Engine | Reimplement the `Workflow` primitives in plain Node for the standalone runner; reuse the Claude Code `Workflow` natively when hosted there |
+| Decomposition | **Host agent decomposes; runner executes.** Codex/Grok/Claude Code produce a validated **plan JSON** (they have repo access); the runner validates and executes it. A bare-shell `--decompose "<task>"` fallback exists but is explicitly lower-fidelity (no repo exploration) |
+| Runner scope | The runner owns everything *after* decomposition: validate plan → compute dependency waves → implement + QA → **merge (gate after each)** → report → cleanup |
 | Packaging | New `bin/` + `lib/` standalone runner in this repo; `skills/ultraswarm/SKILL.md` unchanged |
 
 ## Core insight — why this is low-risk
@@ -65,25 +67,29 @@ Proposed layout:
 
 ```
 ultraswarm/
-  bin/ultraswarm.mjs            # standalone CLI: decompose → confirm → run → report
+  bin/ultraswarm.mjs            # standalone CLI: --plan-file <json> [--decompose "<task>"] --yes
   lib/
     engine.mjs                  # pipeline()/parallel()/phase()/log()/budget — Node Workflow shim
     journal.mjs                 # per-run JSONL journal + replay (resume parity)
     validate.mjs                # JSON-schema validate (ajv) + retry loop
     prompts.mjs                 # SHARED: prompt templates + schemas (lifted from SKILL.md)
+    plan-schema.mjs             # PLAN_SCHEMA — the host→runner input contract + validation
     orchestrator/
-      decompose.mjs             # Phase 0/0a — LLM call producing the task list (SHARED algo)
+      decompose.mjs             # BARE-SHELL FALLBACK only — single brain call, no repo exploration
+      waves.mjs                 # topological wave computation + cycle rejection + intra-wave guard
       implement.mjs             # impl wrapper = worktree + CLI subprocess + gates (NO LLM)
       qa.mjs                    # adaptive QA cascade, judge, escalation (SHARED algo)
-      merge.mjs / report.mjs    # Phase 3 / Phase 4
+      merge.mjs                 # Phase 3 — sequential wave merge, gate after each, conflict → sonnet
+      report.mjs                # Phase 4 — structured report + worktree cleanup
+      runner.mjs                # wires core + engine + brain; drives waves → merge → report
     llm/
       client.mjs                # LlmClient interface
-      anthropic.mjs             # PRIMARY adapter: opus/sonnet/haiku/fable
+      anthropic.mjs             # PRIMARY adapter: opus/sonnet/haiku/fable (per-model request shape)
       openai.mjs  xai.mjs       # optional later adapters (gpt-5.x / grok)
       brain-router.mjs          # abstract tier → provider/model (sibling of router.mjs)
   hosts/
-    codex/                      # thin launcher (AGENTS.md entry / prompt) → execs bin/
-    grok/                       # thin launcher (command alias) → execs bin/
+    codex/                      # launcher: host decomposes → writes plan.json → execs bin/ --plan-file
+    grok/                       # launcher: same contract
   scripts/router.mjs            # REUSED unchanged
   skills/ultraswarm/SKILL.md    # PRIMARY host (Claude Code) — unchanged
 ```
@@ -129,21 +135,42 @@ Append each completed step `{stepKey, input-hash, result}` to `.ultraswarm/run-<
 On `--resume <id>`, replay cached results for unchanged steps and re-run from the first
 changed/absent one — the standalone equivalent of `resumeFromRunId`.
 
-### 5. Orchestrator modules (`lib/orchestrator/`) — lift & adapt (the bulk)
+### 5. Plan input contract (`lib/plan-schema.mjs`) — the host→runner boundary
+The runner's primary input is a **validated plan JSON**, produced by the host (Codex/Grok/Claude
+Code) or by the bare-shell fallback decomposer:
+```
+{ tasks: [{ id, description, files, cli, model_tier, complexity_score, risk, dependencies, prompt }] }
+```
+`PLAN_SCHEMA` validates it before any execution; the runner **fails loud** on unknown CLIs
+(checked against `DEFAULT_REGISTRY`), invalid tiers, missing fields, or dependency cycles. This
+is the contract that lets the host own decomposition while the runner owns execution.
+
+### 6. Orchestrator modules (`lib/orchestrator/`) — lift & adapt (the bulk)
 Port the embedded `SKILL.md` JS into real modules, dependency-injecting the primitives:
-- `decompose.mjs` — Phase 0/0a as an explicit brain call returning the task list + waves;
-  the runner then prints the plan and waits for confirmation (`--yes` to skip).
+- `waves.mjs` — topological sort of the task list over its `dependencies` edges into ordered
+  waves (wave 1 = no deps; wave N = deps all in earlier waves); reject cycles; the intra-wave
+  guard (no task may depend on another task in the same wave) is the ported `SKILL.md` check.
 - `implement.mjs` — the impl wrapper as **plain Node**: `git worktree add`, write
   `.ultraswarm-prompt.txt`, `resolveRoute()` from `router.mjs` to get the CLI command, spawn
   it with the tier timeout, run gates, parse tokens, commit, return `IMPL_SCHEMA` JSON.
 - `qa.mjs` — port `adaptiveQA`, `runAdversarialQA` (the security-Opus + Sonnet→Opus cascade),
   `judgeCompetition`, `runExpertEscalation`, the quorum/critical rules — unchanged logic,
-  `agent()` now hits the LLM client.
-- `merge.mjs` / `report.mjs` — Phase 3 (sequential merge + gate, conflict → stronger model)
-  and Phase 4 (structured report).
-- Dependency waves: the chaining loop moves from the orchestrator prose into `bin/`.
+  `agent()` now hits the LLM client (and per-model request shaping — see §2 caveat).
+- `merge.mjs` — Phase 3: for each wave's approved tasks, sequential `git merge --squash` + full
+  gate after each; conflicts resolved with a `sonnet`-tier brain call (pick, don't blend);
+  the next wave rebases on the new HEAD.
+- `report.mjs` — Phase 4: structured report (per-task table, token accounting) + worktree/branch
+  cleanup sweep.
+- `runner.mjs` — the driver: `waves(tasks)` → for each wave run tasks (`pipeline`/competition)
+  → `merge` that wave → advance base → after the last wave, `report`.
+- `decompose.mjs` — **bare-shell fallback only**: a single brain call turning a free-text task
+  into a plan JSON, with no repo exploration. Hosts bypass this by supplying `--plan-file`.
 
-### 6. Registry (`scripts/router.mjs`) — reused unchanged
+**Anthropic adapter caveat (§2):** build the request **per model capability** — `output_config.effort`
+and adaptive thinking apply to Sonnet 4.6 / Opus / Fable, **not Haiku 4.5** (it 400s). The Haiku
+path sends a plain Messages request with structured output only.
+
+### 7. Registry (`scripts/router.mjs`) — reused unchanged
 `DEFAULT_REGISTRY`, `loadConfig`, `validateConfig`, `resolveRoute` already have zero Claude
 Code dependencies. They are the backbone of both hosts.
 
@@ -154,10 +181,14 @@ it. Host "support" is a thin launcher, not a reimplementation.
 
 | Host | How it launches the swarm |
 |---|---|
-| **Bare shell** | `node bin/ultraswarm.mjs "<task>" [--yes] [--resume <id>]` |
-| **Codex CLI** | An `AGENTS.md` / prompt entry instructing Codex to run the command above; `codex exec` shells out and relays the report |
-| **Grok CLI** | A command alias / prompt doing the same |
-| **Claude Code (primary)** | Unchanged — `/ultraswarm` runs the native `Workflow` version of the shared core |
+| **Codex CLI** | An `AGENTS.md` entry instructs Codex to explore the repo, emit a plan JSON, present it, and on approval run `node bin/ultraswarm.mjs --plan-file plan.json --yes`; it relays the report |
+| **Grok CLI** | A command/prompt doing the same — decompose → `--plan-file` → execute |
+| **Bare shell** | `node bin/ultraswarm.mjs --plan-file plan.json --yes`, or the lower-fidelity `--decompose "<task>"` fallback; `--resume <id>` to resume |
+| **Claude Code (primary)** | Unchanged — `/ultraswarm` runs the native `Workflow` version of the shared core, decomposing in Phase 0 as today |
+
+The host owns decomposition (it has repo access); the runner validates the plan JSON and owns
+execution → waves → merge → report. The plan the host presented is the exact plan executed (no
+re-decomposition), so approved-vs-run can't diverge.
 
 Health-checking, write-probing, worktree management, and the ≥2-CLI requirement live in the
 runner, identical to the skill.
@@ -166,7 +197,7 @@ runner, identical to the skill.
 
 | Capability | Claude Code (primary) | Standalone runner (Codex/Grok/shell) |
 |---|---|---|
-| Decomposition | Inline orchestrator reasoning (rides session) | Explicit Anthropic brain call (billed) |
+| Decomposition | Inline orchestrator reasoning (rides session) | **Host agent** emits a validated plan JSON (repo-aware); `--decompose` fallback is a single billed call |
 | Impl wrappers | Haiku subagents running Bash | Plain Node subprocess (no model) |
 | Adaptive QA cascade | Native `agent({model,schema})` | Anthropic brain calls via `LlmClient` |
 | Structured output | Workflow `schema` (auto-retry) | `lib/validate.mjs` (ajv + retry) |
@@ -221,12 +252,16 @@ rather than riding the Claude Code session.
    limiter. *(~2–3 days)*
 3. **Brain client** — `lib/llm/anthropic.mjs` + `brain-router.mjs` + `lib/validate.mjs`
    (schema + retry). *(~1–2 days)*
-4. **Impl wrapper + merge/report as Node** — `implement.mjs` (subprocess/git/gates, reusing
-   `resolveRoute`), `merge.mjs`, `report.mjs`. *(~2–3 days)*
-5. **CLI + journal** — `bin/ultraswarm.mjs` (decompose→confirm→run→report, `--yes`,
-   `--resume`) + `lib/journal.mjs`. *(~2 days)*
-6. **Host shims + docs** — `hosts/codex/`, `hosts/grok/`, README section, env/auth notes.
-   *(~1–2 days)*
+4. **Plan contract + impl wrapper** — `lib/plan-schema.mjs` (validate the host's plan JSON,
+   reject bad CLIs/tiers/cycles) + `implement.mjs` (subprocess/git/gates, reusing `resolveRoute`).
+   *(~2 days)*
+5. **Waves + merge + report + runner** — `waves.mjs` (topological waves + cycle/intra-wave guard),
+   `merge.mjs` (sequential wave merge, gate after each, conflict → sonnet), `report.mjs`
+   (report + cleanup), `runner.mjs` driving waves → merge → report. *(~3 days)*
+6. **CLI + journal** — `bin/ultraswarm.mjs` (`--plan-file`, `--decompose` fallback, `--yes`,
+   `--resume`) + `lib/journal.mjs` (keyed on label+attempt+diff-hash). *(~2 days)*
+7. **Host shims + docs** — `hosts/codex/`, `hosts/grok/` (decompose → `--plan-file`), README
+   section, billing/auth notes. *(~1–2 days)*
 
 **Proof-of-life milestone (do first, before breadth):** phases 1–5 reduced to a single
 end-to-end path — decompose → one routine task → gate → merge → report from a bare shell.
@@ -243,8 +278,9 @@ Defer competition/adversarial breadth, OpenAI/xAI adapters, and rich resume unti
 
 ## Open questions
 
-1. Confirmation UX in non-interactive hosts (Codex `exec`): default to requiring `--yes`, or
-   add a `--plan-only` mode that prints the plan and exits for the host to relay?
+1. ~~Confirmation UX in non-interactive hosts.~~ **Resolved:** the host decomposes and presents
+   the plan, then runs the runner with the *same* `--plan-file`; the runner executes exactly that
+   plan (no re-decomposition), so the approved and executed plans are identical.
 2. Should the standalone runner reuse the *same* `ultraswarm.config.json`
    (`intelligence.modelRouting.claudeModels`) to drive `brain-router.mjs`? (Recommended — one
    config, both hosts.)
