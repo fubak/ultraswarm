@@ -200,7 +200,7 @@ describe('router', () => {
         () => resolveRoute({ cli: 'claude' }),
         (err) => {
           assert(err.message.includes('Unknown cli "claude"'));
-          assert(err.message.includes('codex, gemini, grok, agy, droid, opencode, pi'));
+          assert(err.message.includes('codex, gemini, grok, agy, droid, opencode, pi, pi-local'));
           return true;
         }
       );
@@ -261,6 +261,18 @@ describe('router', () => {
       const expert = resolveRoute({ cli: 'pi', complexity_score: 200 });
       assert.strictEqual(expert.tier, 'expert');
       assert.match(expert.command, /--model claude-opus-4-8 --thinking high/);
+    });
+
+    it('pi-local routes Ollama models by tier and aliases its binary to pi', () => {
+      assert.match(
+        resolveRoute({ cli: 'pi-local', model_tier: 'simple' }).command,
+        /^pi -p --provider ollama --model qwen3-coder:7b "\$\(cat \.ultraswarm-prompt\.txt\)"$/
+      );
+      assert.match(
+        resolveRoute({ cli: 'pi-local', model_tier: 'complex' }).command,
+        /--provider ollama --model qwen3-coder:30b/
+      );
+      assert.strictEqual(DEFAULT_REGISTRY['pi-local'].binary, 'pi');
     });
   });
 });

@@ -286,6 +286,29 @@ export const DEFAULT_REGISTRY = freezeDeep({
         invocation: 'pi -p --provider anthropic --model claude-opus-4-8 --thinking high "$(cat .ultraswarm-prompt.txt)"'
       }
     }
+  },
+  'pi-local': {
+    specialty: 'local/private models via Ollama (offline-capable, lower-stakes work)',
+    timeoutMs: 900000,
+    binary: 'pi',
+    models: {
+      simple: {
+        model: 'qwen3-coder:7b',
+        invocation: 'pi -p --provider ollama --model qwen3-coder:7b "$(cat .ultraswarm-prompt.txt)"'
+      },
+      moderate: {
+        model: 'qwen3-coder:30b',
+        invocation: 'pi -p --provider ollama --model qwen3-coder:30b "$(cat .ultraswarm-prompt.txt)"'
+      },
+      complex: {
+        model: 'qwen3-coder:30b',
+        invocation: 'pi -p --provider ollama --model qwen3-coder:30b "$(cat .ultraswarm-prompt.txt)"'
+      },
+      expert: {
+        model: 'qwen3-coder:30b',
+        invocation: 'pi -p --provider ollama --model qwen3-coder:30b "$(cat .ultraswarm-prompt.txt)"'
+      }
+    }
   }
 });
 
