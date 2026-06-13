@@ -62,7 +62,7 @@ contract is at `hosts/grok/skills/ultraswarm/SKILL.md`.
 - A Git repository
 - Node 22+
 - At least two authenticated worker CLIs from `codex`, `gemini`, `grok`, `agy`,
-  `droid`, and `opencode`
+  `droid`, `opencode`, `pi`, and `pi-local`
 - An authenticated `claude` CLI for the default QA/decomposition brain, or
   `ANTHROPIC_API_KEY` with `ULTRASWARM_BRAIN=anthropic-api`
 
@@ -182,6 +182,30 @@ Add policy to `ultraswarm.config.json`:
 Project configuration overrides the global
 `~/.claude/ultraswarm.config.json`. For container isolation, set `containerImage` to an image containing the selected worker CLIs. Network denial requires container
 isolation and is rejected when configured with native isolation.
+
+## Local / Private Models (Ollama)
+
+`pi` and `pi-local` are both backed by the [`pi`](https://github.com/earendil-works/pi)
+CLI. `pi` runs a provider-agnostic Anthropic Claude spread; `pi-local` is an always-on
+worker that routes through **Ollama** for fully local, private, offline-capable runs.
+
+Ollama is a model backend, not an agentic worker — it cannot edit files or run commands on
+its own. `pi-local` is the harness that drives local models with tool-calling inside an
+isolated worktree.
+
+To use `pi-local`:
+
+1. Install and run [Ollama](https://ollama.com).
+2. Pull the models you want, e.g. `ollama pull qwen3-coder:7b` and
+   `ollama pull qwen3-coder:30b`.
+3. Register an `ollama` provider and those models in `~/.pi/agent/models.json` (Pi reads
+   provider entries with `baseUrl: http://localhost:11434/v1`, `api: openai-completions`).
+4. Override the default model IDs in `ultraswarm.config.json` to match the models you
+   pulled (see `ultraswarm.config.advanced.json`).
+
+`doctor` and `workers` probe the `pi` binary, so a green `pi-local` means "pi is
+installed" — not "Ollama is running." If Ollama is down, `pi-local` tasks fail at execution
+time and are reported and retried like any other worker failure.
 
 ## State And Safety
 
