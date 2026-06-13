@@ -4,6 +4,26 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [2.4.3] — 2026-06-12
+
+Enhanced Codex integration with native skill architecture and improved compatibility.
+
+### Added
+- **Native Codex skill**: Proper installable skill for `~/.agents/skills/ultraswarm` with dedicated installation script (`scripts/install-codex-skill.sh`)
+- **Enhanced validation**: Added validation checks for Codex skill contract, installer functionality, and host-specific installation documentation
+- **Comprehensive documentation**: Updated README with clear distinction between Claude Code and Codex installation methods and usage patterns
+
+### Changed  
+- **Codex integration architecture**: Deprecated legacy `AGENTS.md` approach in favor of skill-based integration for better maintainability
+- **Installation workflow**: Codex users now get a streamlined symlink-based installation that auto-updates with git pulls
+- **Documentation clarity**: README now explicitly covers both `/ultraswarm` (Claude Code) and `$ultraswarm` (Codex) invocation patterns
+
+### Fixed
+- **Cross-platform compatibility**: Codex skill now works reliably across different Codex installations
+- **Installation robustness**: Installer handles existing installations gracefully and provides clear error messages
+
+All 99 tests passing with 15/15 validation checks green. Verified end-to-end compatibility.
+
 ## [2.4.2] — 2026-06-12
 
 High-risk path hardening: the competition/escalation path now works under the documented
