@@ -10,6 +10,7 @@ import { decompose } from '../lib/orchestrator/decompose.mjs'
 import { runSwarm } from '../lib/orchestrator/runner.mjs'
 import { buildReport, cleanup } from '../lib/orchestrator/report.mjs'
 import { Journal } from '../lib/journal.mjs'
+import { commandMain, exitCode } from './cli.mjs'
 
 export function buildRunConfig(base, plan) {
   const { valid, errors } = validatePlan(plan)
@@ -79,5 +80,5 @@ async function main() {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  main().catch((e) => { console.error(`ultraswarm: ${e.message}`); process.exit(1) })
+  commandMain().then((code) => { process.exitCode = code }).catch((e) => { console.error(`ultraswarm: ${e.message}`); process.exitCode = exitCode(e) })
 }

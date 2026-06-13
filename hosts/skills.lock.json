@@ -1,0 +1,8 @@
+{
+  "contract": 1,
+  "files": {
+    "skills/ultraswarm/SKILL.md": "0e152bb622adb141cd70ca89621a74af0890b0f7fc31f2fc93d14948494db947",
+    "hosts/codex/skills/ultraswarm/SKILL.md": "5dfdedfc832b3251c15bd764bb5bf740001ff618ef7cdb80b2bc2858a4e1e9a4",
+    "hosts/grok/skills/ultraswarm/SKILL.md": "2c27b092e51af59ae1e44164c11fb2391d916c5f4d953f9cbfef9dc150a14f4e"
+  }
+}

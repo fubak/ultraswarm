@@ -4,6 +4,36 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.0.0] - 2026-06-13
+
+Major orchestration redesign focused on durability, safety, and measurable worker routing.
+
+### Added
+- SQLite run, task, attempt, approval, event, and repository-local worker-metric storage.
+- Supervised worker adapters with process-group cancellation, timeouts, redacted bounded logs, and usage parsing.
+- Capability and historical-metric routing with `explain-routing` output.
+- Executable task contracts for commands, assertions, and allowed paths.
+- Policy controls for worker quorum, concurrency, competition, approvals, forbidden paths, cost, isolation, and network access.
+- Transactional integration worktrees and branches with explicit plan and merge approvals.
+- Durable `run`, `merge`, `status`, `logs`, `cancel`, `resume`, `doctor`, `workers`, `explain-routing`, and `export` commands.
+- Generated Claude, Codex, and Grok host skills with a shared contract and SHA-256 provenance lock.
+
+### Changed
+- Node 22 is now required for the built-in `node:sqlite` API.
+- Claude Code now uses the same standalone runner as every other host; the embedded Workflow implementation was removed.
+- `cli` and `model_tier` are optional plan fields when automatic routing is desired.
+- Accepted task commits integrate away from the checked-out branch and land only through a final fast-forward merge.
+- `--yes` remains as a compatibility alias for plan approval only and never approves merge.
+
+### Safety
+- Worker environments are allowlisted instead of inheriting host secrets.
+- High-risk tasks receive automatic alternate workers when the healthy roster permits competition.
+- Target-branch movement blocks merge and enters recoverable `stale_base` state.
+- v2 JSONL journals are not resumed as v3 runs.
+
+### Validation
+- 95 tests cover orchestration, integration isolation, state, policy, routing, supervision, and host parity.
+
 ## [2.4.3] — 2026-06-12
 
 Enhanced Codex integration with native skill architecture and improved compatibility.

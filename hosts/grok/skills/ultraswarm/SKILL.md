@@ -3,11 +3,11 @@ name: ultraswarm
 description: Orchestrate complex coding work through the ultraswarm v3 standalone runner.
 ---
 
-# Ultraswarm v3 for claude
+# Ultraswarm v3 for grok
 
 Use the repository's standalone runner as the only orchestration implementation. Do not recreate orchestration in the host, and do not implement delegated feature code directly.
 
-Invocation: `/ultraswarm`
+Invocation: `ultraswarm`
 
 ## Runner
 

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "runner": "bin/ultraswarm.mjs",
+  "node": ">=22",
+  "commands": ["run", "merge", "status", "logs", "cancel", "resume", "doctor", "workers", "explain-routing", "export"],
+  "approvals": ["plan", "merge"],
+  "hosts": {
+    "claude": { "skill": "skills/ultraswarm/SKILL.md", "invocation": "/ultraswarm" },
+    "codex": { "skill": "hosts/codex/skills/ultraswarm/SKILL.md", "invocation": "$ultraswarm" },
+    "grok": { "skill": "hosts/grok/skills/ultraswarm/SKILL.md", "invocation": "ultraswarm" }
+  }
+}

@@ -147,59 +147,20 @@ else
   fail "version mismatch across plugin and npm manifests"
 fi
 
-# --- Check 4: Embedded Workflow JS parses -------------------------------------
-begin_check 4 "Embedded Workflow JS parses"
-# `mktemp --suffix=` is a GNU coreutils extension (present on the Ubuntu CI
-# runner). The script also advertises local use; on BSD/macOS mktemp this flag
-# would need adjusting.
-TMP_JS="$(mktemp --suffix=.js)"
-TMP_ERR="$(mktemp)"
-trap 'rm -f "$TMP_JS" "$TMP_ERR" "$JSON_TMP"' EXIT
-
-# Extract the fenced block between a full-line ```js and the next full-line ```.
-# Anchor on full lines so ```json does not match.
-awk '
-  /^```js$/ { grab = 1; next }
-  grab && /^```$/ { exit }
-  grab { print }
-' "$SKILL_MD" > "$TMP_JS"
-
-if [ ! -s "$TMP_JS" ]; then
-  fail "could not extract a non-empty \`\`\`js block from SKILL.md"
+# --- Check 4: Generated host skills are current -------------------------------
+begin_check 4 "Generated host skill provenance"
+if node "$ROOT/scripts/generate-host-skills.mjs" --check 2>/dev/null; then
+  pass "generated host skills match their SHA-256 lock"
 else
-  # Strip the leading `export const meta = { ... }` object literal, then validate
-  # the remaining script body parses as an async function body.
-  #
-  # META-BLOCK CONTRACT (required for the strip regex below to be correct):
-  #   - `export const meta = {` MUST be the first line of the ```js block.
-  #   - The object's closing brace MUST be a line that is exactly `}` at
-  #     column 0 (no trailing comment, no indentation) — it terminates the strip.
-  #   - No inner property may place a `}` alone at column 0 (would truncate early).
-  #   - Line endings MUST be LF (the `\n}\n` anchor assumes Unix newlines; CRLF
-  #     would leave a stray `\r` and break the match).
-  if node -e "const src=require('fs').readFileSync('$TMP_JS','utf8').replace(/^export const meta[\s\S]*?\n}\n/,''); new Function('args','agent','parallel','pipeline','log','budget','return (async()=>{'+src+'})()');" 2>"$TMP_ERR"; then
-    pass "Workflow JS body parses as an async function body"
-  else
-    fail "Workflow JS body failed to parse: $(head -1 "$TMP_ERR" 2>/dev/null)"
-  fi
+  fail "generated host skills or provenance lock are stale"
 fi
 
-# --- Check 5: No resume-breaking tokens in the JS block -----------------------
-begin_check 5 "No resume-breaking tokens in Workflow JS"
-if [ -s "$TMP_JS" ]; then
-  bad=""
-  for tok in 'Date.now(' 'Math.random(' 'new Date('; do
-    if grep -qF "$tok" "$TMP_JS"; then
-      bad="$bad $tok"
-    fi
-  done
-  if [ -n "$bad" ]; then
-    fail "Workflow JS contains non-deterministic token(s):$bad"
-  else
-    pass "no Date.now( / Math.random( / new Date( in Workflow JS"
-  fi
+# --- Check 5: Skills are thin runner adapters ---------------------------------
+begin_check 5 "Host skills are thin runner adapters"
+if grep -q "standalone runner as the only orchestration implementation" "$SKILL_MD"; then
+  pass "host skills delegate orchestration to the standalone runner"
 else
-  fail "skipped — no JS block extracted"
+  fail "Claude skill is not a generated thin runner adapter"
 fi
 
 # --- Check 6: Example config valid --------------------------------------------
@@ -277,15 +238,15 @@ Promise.all([import(process.argv[1]), import("node:fs")]).then(([m, fs]) => {
   fi
 fi
 
-# --- Check 11: Workflow behavior harness ---------------------------------------
-begin_check 11 "Workflow behavior harness"
+# --- Check 11: Host contract behavior harness ---------------------------------------
+begin_check 11 "Host contract behavior harness"
 if [ ! -f "$WORKFLOW_TEST" ]; then
   fail "scripts/workflow-harness.test.mjs does not exist"
 else
   if node --test "$WORKFLOW_TEST" >/dev/null 2>&1; then
-    pass "embedded Workflow JS behavior tests passed"
+    pass "host contract parity tests passed"
   else
-    fail "embedded Workflow JS behavior tests failed"
+    fail "host contract parity tests failed"
   fi
 fi
 
@@ -305,14 +266,14 @@ fi
 # --- Check 13: Codex skill contract ------------------------------------------
 begin_check 13 "Codex skill contract"
 codex_contract_bad=""
-for required in '\$ultraswarm <task>' '\$ultraswarm analyze <task>' '\$ultraswarm config' '--plan-file .ultraswarm-plan.json' '--yes' 'explicit user approval'; do
+for required in '$ultraswarm' 'run --plan-file .ultraswarm-plan.json' '--approve-plan' 'merge <run-id> --approve' 'separate merge approval'; do
   if ! grep -q -- "$required" "$CODEX_SKILL_MD" 2>/dev/null; then
     fail "Codex skill is missing required contract text: $required"
     codex_contract_bad=yes
   fi
 done
 if [ -z "$codex_contract_bad" ]; then
-  pass "Codex skill defines invocation modes, plan preview, and approval gate"
+  pass "Codex skill defines runner delegation and both approval gates"
 fi
 
 # --- Check 14: Codex installer ------------------------------------------------
