@@ -4,6 +4,49 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.0.0] - 2026-06-13
+
+Major orchestration redesign focused on durability, safety, and measurable worker routing.
+
+### Added
+- SQLite run, task, attempt, approval, event, and repository-local worker-metric storage.
+- Supervised worker adapters with process-group cancellation, timeouts, redacted bounded logs, and usage parsing.
+- Capability and historical-metric routing with `explain-routing` output.
+- Executable task contracts for commands, assertions, and allowed paths.
+- Policy controls for worker quorum, concurrency, competition, approvals, forbidden paths, cost, isolation, and network access.
+- Transactional integration worktrees and branches with explicit plan and merge approvals.
+- Durable `run`, `merge`, `status`, `logs`, `cancel`, `resume`, `doctor`, `workers`, `explain-routing`, and `export` commands.
+- Generated Claude, Codex, and Grok host skills with a shared contract and SHA-256 provenance lock.
+
+### Changed
+- Node 22 is now required for the built-in `node:sqlite` API.
+- Claude Code now uses the same standalone runner as every other host; the embedded Workflow implementation was removed.
+- `cli` and `model_tier` are optional plan fields when automatic routing is desired.
+- Accepted task commits integrate away from the checked-out branch and land only through a final fast-forward merge.
+- `--yes` remains as a compatibility alias for plan approval only and never approves merge.
+
+### Safety
+- Worker environments are allowlisted instead of inheriting host secrets.
+- High-risk tasks receive automatic alternate workers when the healthy roster permits competition.
+- Target-branch movement blocks merge and enters recoverable `stale_base` state.
+- v2 JSONL journals are not resumed as v3 runs.
+- Concurrent worker subprocesses are capped at `policy.maxParallelWorkers`.
+- `forbiddenPaths` is enforced against the files a worker actually changed, not only the declared task files.
+- Worker logs redact format-based secrets (`sk-ant-`/`sk-`/`gh*_` keys, JWTs, and `Authorization: Bearer` values), not just keyword assignments.
+- `maxCostUsd` counts brain (model) spend as well as worker spend, so the budget ceiling is real.
+- High-risk tasks that cannot field at least two usable workers are tombstoned rather than approved without competition.
+
+### Reliability
+- Every task is accounted for as merged, failed, or blocked; a thrown task can no longer vanish, and a mid-run merge failure still returns a complete, persisted result.
+- Worktrees and `ultraswarm/*` branches are cleaned up after every run (and the integration worktree after merge); a crashed attempt resets its worktree before retry.
+- SQLite uses WAL with `SQLITE_BUSY` retries and a stepwise migration runner; read-only commands keep working against a newer-schema database.
+- `resume` recovers a crashed `running` run and a conflicted rebase (with `rebase --abort`), and merge approval is revoked in the store on `stale_base` so re-approval is mandatory.
+- `cancel` escalates to `SIGKILL` and marks attempts cancelled; `export` fails loud on an unknown run id.
+- The standalone runner refuses to start on Node < 22 with a clear message instead of a cryptic module crash.
+
+### Validation
+- 130 tests cover orchestration, integration isolation, state, policy, routing, supervision, host parity, and the safety/reliability hardening above.
+
 ## [2.4.3] — 2026-06-12
 
 Enhanced Codex integration with native skill architecture and improved compatibility.

@@ -335,6 +335,7 @@ export function resolveRoute(task, config = {}) {
     ?? config.overrides?.[cli]?.invocation
     ?? DEFAULT_REGISTRY[cli].models[tier].invocation;
   const timeoutMs = config.overrides?.[cli]?.timeoutMs ?? DEFAULT_REGISTRY[cli].timeoutMs;
+  const model = config.overrides?.[cli]?.models?.[tier]?.model ?? config.overrides?.[cli]?.models?.simple?.model ?? DEFAULT_REGISTRY[cli].models[tier].model;
 
-  return { cli, tier, command, timeoutMs };
+  return { cli, tier, model, command, timeoutMs };
 }
