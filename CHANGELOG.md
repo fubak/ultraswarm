@@ -22,7 +22,9 @@ All notable changes to ultraswarm are documented here. The format is based on
   Injected per CLI for `codex`/`droid`/`pi` via a `{{EFFORT}}` slot + `effortFlags` map.
 - **Effort-first escalation** — on QA failure the attempt loop climbs effort
   (low → medium → high) before stepping up the model tier, so the cheapest correction is tried
-  first. Expert-tier tasks now run at low effort by default and escalate as needed.
+  first. Expert-tier tasks now run at low effort by default and escalate as needed. Routine
+  tasks (the common path) climb effort within their tier on retry; high-risk/complex tasks
+  use the full effort-then-tier ladder.
 
 ## [3.0.0] - 2026-06-13
 
