@@ -18,8 +18,8 @@ CODEX_INSTALLER="$ROOT/scripts/install-codex-skill.sh"
 PACKAGE_JSON="$ROOT/package.json"
 PACKAGE_LOCK_JSON="$ROOT/package-lock.json"
 CONFIG_JSON="$ROOT/ultraswarm.config.example.json"
-ROUTER_MJS="$ROOT/scripts/router.mjs"
-ROUTER_TEST="$ROOT/scripts/router.test.mjs"
+ROUTER_MJS="$ROOT/lib/router.mjs"
+ROUTER_TEST="$ROOT/lib/router.test.mjs"
 ADV_CFG="$ROOT/ultraswarm.config.advanced.json"
 WORKFLOW_TEST="$ROOT/scripts/workflow-harness.test.mjs"
 
@@ -196,24 +196,24 @@ done
 # --- Check 8: Router module syntax --------------------------------------------
 begin_check 8 "Router module syntax"
 if [ ! -f "$ROUTER_MJS" ]; then
-  fail "scripts/router.mjs does not exist"
+  fail "lib/router.mjs does not exist"
 else
   if node --check "$ROUTER_MJS" 2>/dev/null; then
-    pass "scripts/router.mjs syntax OK"
+    pass "lib/router.mjs syntax OK"
   else
-    fail "scripts/router.mjs failed syntax check"
+    fail "lib/router.mjs failed syntax check"
   fi
 fi
 
 # --- Check 9: Router test suite -----------------------------------------------
 begin_check 9 "Router test suite"
 if [ ! -f "$ROUTER_TEST" ]; then
-  fail "scripts/router.test.mjs does not exist"
+  fail "lib/router.test.mjs does not exist"
 else
   if node --test "$ROUTER_TEST" >/dev/null 2>&1; then
-    pass "scripts/router.test.mjs tests passed"
+    pass "lib/router.test.mjs tests passed"
   else
-    fail "scripts/router.test.mjs tests failed"
+    fail "lib/router.test.mjs tests failed"
   fi
 fi
 
@@ -222,7 +222,7 @@ begin_check 10 "Advanced config validates"
 if [ ! -f "$ADV_CFG" ]; then
   fail "ultraswarm.config.advanced.json does not exist"
 elif [ ! -f "$ROUTER_MJS" ]; then
-  fail "scripts/router.mjs does not exist (needed for config validation)"
+  fail "lib/router.mjs does not exist (needed for config validation)"
 else
   if node -e '
 Promise.all([import(process.argv[1]), import("node:fs")]).then(([m, fs]) => {
