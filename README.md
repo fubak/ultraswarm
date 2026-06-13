@@ -207,6 +207,24 @@ To use `pi-local`:
 installed" — not "Ollama is running." If Ollama is down, `pi-local` tasks fail at execution
 time and are reported and retried like any other worker failure.
 
+## Effort Levels
+
+Reasoning effort is a per-task dial, **independent of model tier**. The decomposition brain
+assigns `effort` (`off`/`low`/`medium`/`high`/`xhigh`) to each task and **defaults to `low`** —
+most routine tasks produce the same result at low effort, far faster and cheaper. High effort is
+reserved for genuinely hard reasoning.
+
+Effort is injected per CLI for the workers that expose the dial (`codex`, `droid`, `pi`); other
+workers ignore it. On QA failure, ultraswarm escalates **effort first** (low → medium → high)
+before stepping up the model tier — the cheapest correction rung first.
+
+Set `effort` explicitly on a task in your plan JSON to override, or override `effortFlags` per CLI
+in `ultraswarm.config.json` (see `ultraswarm.config.advanced.json`).
+
+> Behavior note: because effort defaults to `low`, an expert-tier task runs the expert *model* at
+> *low* effort and escalates on failure — it is no longer pinned to high effort. Pin it with
+> `effort: "high"` if you need maximum reasoning up front.
+
 ## State And Safety
 
 - Worker attempts run in separate worktrees and process groups.

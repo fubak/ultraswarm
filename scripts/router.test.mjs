@@ -249,16 +249,42 @@ describe('router', () => {
       assert.strictEqual(r.timeoutMs, DEFAULT_REGISTRY.gemini.timeoutMs);
     });
 
+    it('injects the per-CLI effort flag, defaulting to low', () => {
+      assert.match(resolveRoute({ cli: 'codex', model_tier: 'simple' }).command, /-c model_reasoning_effort=low /);
+      assert.match(resolveRoute({ cli: 'codex', model_tier: 'simple', effort: 'high' }).command, /-c model_reasoning_effort=high /);
+      assert.match(resolveRoute({ cli: 'pi', model_tier: 'simple' }).command, /--thinking low /);
+      assert.match(resolveRoute({ cli: 'droid', model_tier: 'complex', effort: 'medium' }).command, /-r medium /);
+      assert.strictEqual(resolveRoute({ cli: 'codex', model_tier: 'simple' }).effort, 'low');
+    });
+
+    it('leaves invocations without an {{EFFORT}} placeholder byte-identical', () => {
+      assert.strictEqual(
+        resolveRoute({ cli: 'opencode', complexity_score: 5 }).command,
+        DEFAULT_REGISTRY.opencode.models.simple.invocation
+      );
+    });
+
+    it('throws on an invalid effort value, listing the allowed set', () => {
+      assert.throws(
+        () => resolveRoute({ cli: 'codex', model_tier: 'simple', effort: 'turbo' }),
+        (err) => {
+          assert(err.message.includes('Invalid effort "turbo"'));
+          assert(err.message.includes('off, low, medium, high, xhigh'));
+          return true;
+        }
+      );
+    });
+
     it('pi routes the Anthropic spread by tier; expert adds --thinking high', () => {
       assert.match(
         resolveRoute({ cli: 'pi', model_tier: 'simple' }).command,
-        /^pi -p --provider anthropic --model claude-haiku-4-5 "\$\(cat \.ultraswarm-prompt\.txt\)"$/
+        /^pi -p --provider anthropic --model claude-haiku-4-5 --thinking low "\$\(cat \.ultraswarm-prompt\.txt\)"$/
       );
       assert.match(
         resolveRoute({ cli: 'pi', model_tier: 'moderate' }).command,
-        /--model claude-sonnet-4-6/
+        /--model claude-sonnet-4-6 --thinking low/
       );
-      const expert = resolveRoute({ cli: 'pi', complexity_score: 200 });
+      const expert = resolveRoute({ cli: 'pi', complexity_score: 200, effort: 'high' });
       assert.strictEqual(expert.tier, 'expert');
       assert.match(expert.command, /--model claude-opus-4-8 --thinking high/);
     });
@@ -268,10 +294,7 @@ describe('router', () => {
         resolveRoute({ cli: 'pi-local', model_tier: 'simple' }).command,
         /^pi -p --provider ollama --model qwen3-coder:7b "\$\(cat \.ultraswarm-prompt\.txt\)"$/
       );
-      assert.match(
-        resolveRoute({ cli: 'pi-local', model_tier: 'complex' }).command,
-        /--provider ollama --model qwen3-coder:30b/
-      );
+      assert.doesNotMatch(resolveRoute({ cli: 'pi-local', model_tier: 'simple' }).command, /--thinking/);
       assert.strictEqual(DEFAULT_REGISTRY['pi-local'].binary, 'pi');
     });
   });

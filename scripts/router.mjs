@@ -4,6 +4,9 @@ import path from 'node:path';
 
 const VALID_TIERS = ['simple', 'moderate', 'complex', 'expert'];
 const VALID_TIER_SET = new Set(VALID_TIERS);
+const VALID_EFFORTS = ['off', 'low', 'medium', 'high', 'xhigh'];
+const VALID_EFFORT_SET = new Set(VALID_EFFORTS);
+const DEFAULT_EFFORT = 'low';
 const VALID_CLAUDE_MODELS = new Set(['haiku', 'sonnet', 'opus', 'fable']);
 const DEFAULT_THRESHOLDS = Object.freeze({ simple: 20, moderate: 50, complex: 100 });
 
@@ -135,22 +138,23 @@ export const DEFAULT_REGISTRY = freezeDeep({
   codex: {
     specialty: 'backend, logic, algorithms, debugging',
     timeoutMs: 900000,
+    effortFlags: { off: '-c model_reasoning_effort=minimal', low: '-c model_reasoning_effort=low', medium: '-c model_reasoning_effort=medium', high: '-c model_reasoning_effort=high', xhigh: '-c model_reasoning_effort=high' },
     models: {
       simple: {
         model: 'gpt-5.4-mini',
-        invocation: 'codex exec -s workspace-write --skip-git-repo-check -m gpt-5.4-mini "$(cat .ultraswarm-prompt.txt)" </dev/null'
+        invocation: 'codex exec -s workspace-write --skip-git-repo-check -m gpt-5.4-mini {{EFFORT}}"$(cat .ultraswarm-prompt.txt)" </dev/null'
       },
       moderate: {
         model: 'gpt-5.4',
-        invocation: 'codex exec -s workspace-write --skip-git-repo-check -m gpt-5.4 "$(cat .ultraswarm-prompt.txt)" </dev/null'
+        invocation: 'codex exec -s workspace-write --skip-git-repo-check -m gpt-5.4 {{EFFORT}}"$(cat .ultraswarm-prompt.txt)" </dev/null'
       },
       complex: {
         model: 'gpt-5.5',
-        invocation: 'codex exec -s workspace-write --skip-git-repo-check -m gpt-5.5 "$(cat .ultraswarm-prompt.txt)" </dev/null'
+        invocation: 'codex exec -s workspace-write --skip-git-repo-check -m gpt-5.5 {{EFFORT}}"$(cat .ultraswarm-prompt.txt)" </dev/null'
       },
       expert: {
         model: 'gpt-5.5',
-        invocation: 'codex exec -s workspace-write --skip-git-repo-check -m gpt-5.5 -c model_reasoning_effort=high "$(cat .ultraswarm-prompt.txt)" </dev/null'
+        invocation: 'codex exec -s workspace-write --skip-git-repo-check -m gpt-5.5 {{EFFORT}}"$(cat .ultraswarm-prompt.txt)" </dev/null'
       }
     }
   },
@@ -223,22 +227,23 @@ export const DEFAULT_REGISTRY = freezeDeep({
   droid: {
     specialty: 'general full-stack implementation, refactoring',
     timeoutMs: 600000,
+    effortFlags: { off: '-r low', low: '-r low', medium: '-r medium', high: '-r high', xhigh: '-r high' },
     models: {
       simple: {
         model: 'claude-haiku-4-5',
-        invocation: 'droid exec -m claude-haiku-4-5 "$(cat .ultraswarm-prompt.txt)"'
+        invocation: 'droid exec -m claude-haiku-4-5 {{EFFORT}}"$(cat .ultraswarm-prompt.txt)"'
       },
       moderate: {
         model: 'claude-sonnet-4-6',
-        invocation: 'droid exec -m claude-sonnet-4-6 "$(cat .ultraswarm-prompt.txt)"'
+        invocation: 'droid exec -m claude-sonnet-4-6 {{EFFORT}}"$(cat .ultraswarm-prompt.txt)"'
       },
       complex: {
         model: 'claude-opus-4-8',
-        invocation: 'droid exec -m claude-opus-4-8 "$(cat .ultraswarm-prompt.txt)"'
+        invocation: 'droid exec -m claude-opus-4-8 {{EFFORT}}"$(cat .ultraswarm-prompt.txt)"'
       },
       expert: {
         model: 'claude-opus-4-8',
-        invocation: 'droid exec -m claude-opus-4-8 -r high "$(cat .ultraswarm-prompt.txt)"'
+        invocation: 'droid exec -m claude-opus-4-8 {{EFFORT}}"$(cat .ultraswarm-prompt.txt)"'
       }
     }
   },
@@ -268,22 +273,23 @@ export const DEFAULT_REGISTRY = freezeDeep({
     specialty: 'provider-agnostic generalist, full-stack, refactors',
     timeoutMs: 600000,
     binary: 'pi',
+    effortFlags: { off: '--thinking off', low: '--thinking low', medium: '--thinking medium', high: '--thinking high', xhigh: '--thinking xhigh' },
     models: {
       simple: {
         model: 'claude-haiku-4-5',
-        invocation: 'pi -p --provider anthropic --model claude-haiku-4-5 "$(cat .ultraswarm-prompt.txt)"'
+        invocation: 'pi -p --provider anthropic --model claude-haiku-4-5 {{EFFORT}}"$(cat .ultraswarm-prompt.txt)"'
       },
       moderate: {
         model: 'claude-sonnet-4-6',
-        invocation: 'pi -p --provider anthropic --model claude-sonnet-4-6 "$(cat .ultraswarm-prompt.txt)"'
+        invocation: 'pi -p --provider anthropic --model claude-sonnet-4-6 {{EFFORT}}"$(cat .ultraswarm-prompt.txt)"'
       },
       complex: {
         model: 'claude-opus-4-8',
-        invocation: 'pi -p --provider anthropic --model claude-opus-4-8 "$(cat .ultraswarm-prompt.txt)"'
+        invocation: 'pi -p --provider anthropic --model claude-opus-4-8 {{EFFORT}}"$(cat .ultraswarm-prompt.txt)"'
       },
       expert: {
         model: 'claude-opus-4-8',
-        invocation: 'pi -p --provider anthropic --model claude-opus-4-8 --thinking high "$(cat .ultraswarm-prompt.txt)"'
+        invocation: 'pi -p --provider anthropic --model claude-opus-4-8 {{EFFORT}}"$(cat .ultraswarm-prompt.txt)"'
       }
     }
   },
@@ -374,6 +380,9 @@ export function resolveRoute(task, config = {}) {
   if (task?.model_tier !== undefined && !VALID_TIER_SET.has(task.model_tier)) {
     throw new Error(`Invalid model_tier ${JSON.stringify(task.model_tier)}. Allowed values: ${VALID_TIERS.join(', ')}.`);
   }
+  if (task?.effort !== undefined && !VALID_EFFORT_SET.has(task.effort)) {
+    throw new Error(`Invalid effort ${JSON.stringify(task.effort)}. Allowed values: ${VALID_EFFORTS.join(', ')}.`);
+  }
   const thresholds = { ...DEFAULT_THRESHOLDS, ...(config.intelligence?.promptAnalysis?.complexityThresholds ?? {}) };
   const tier = task?.model_tier ?? getTier(task?.complexity_score, thresholds);
   const command = config.overrides?.[cli]?.models?.[tier]?.invocation
@@ -383,5 +392,10 @@ export function resolveRoute(task, config = {}) {
   const timeoutMs = config.overrides?.[cli]?.timeoutMs ?? DEFAULT_REGISTRY[cli].timeoutMs;
   const model = config.overrides?.[cli]?.models?.[tier]?.model ?? config.overrides?.[cli]?.models?.simple?.model ?? DEFAULT_REGISTRY[cli].models[tier].model;
 
-  return { cli, tier, model, command, timeoutMs };
+  const effort = task?.effort ?? DEFAULT_EFFORT;
+  const effortFlags = config.overrides?.[cli]?.effortFlags ?? DEFAULT_REGISTRY[cli].effortFlags;
+  const effortFragment = effortFlags?.[effort] ?? effortFlags?.[DEFAULT_EFFORT] ?? '';
+  const resolvedCommand = command.replace('{{EFFORT}}', effortFragment ? `${effortFragment} ` : '');
+
+  return { cli, tier, model, command: resolvedCommand, timeoutMs, effort };
 }
