@@ -4,6 +4,20 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **`pi` worker** — the provider-agnostic [`pi`](https://github.com/earendil-works/pi)
+  coding CLI, with an Anthropic Claude tier spread (Haiku → Sonnet → Opus → Opus with
+  `--thinking high`). Run non-interactively via `pi -p`, which auto-executes tools like
+  the other workers.
+- **`pi-local` worker** — an always-on local/private worker that drives **Ollama** models
+  (default `qwen3-coder:7b`/`:30b`, overridable) through the same `pi` binary. Brings
+  fully local, offline-capable runs into the routing pool. Requires a configured `ollama`
+  provider in `~/.pi/agent/models.json`; see the README.
+- Optional `binary` field on registry entries so a logical worker can map to a different
+  executable (`pi-local` → `pi`); `ShellWorkerAdapter` now probes the resolved binary.
+
 ## [3.0.0] - 2026-06-13
 
 Major orchestration redesign focused on durability, safety, and measurable worker routing.
