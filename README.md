@@ -207,6 +207,14 @@ To use `pi-local`:
 installed" — not "Ollama is running." If Ollama is down, `pi-local` tasks fail at execution
 time and are reported and retried like any other worker failure.
 
+> **Local-model requirement:** `pi-local` only works with a local model that emits
+> **structured tool-calls** through Pi's provider endpoint. Many small local models (and the
+> OpenAI-completions compatibility path) will describe an edit as plain text instead of
+> calling the `write`/`edit` tool — Pi then has nothing to execute and no file is produced,
+> so the task fails its contract. Choose a local model with reliable tool-calling, and treat
+> the default `qwen3-coder` IDs as examples to override. Frontier-hosted providers (the `pi`
+> worker) do not have this limitation.
+
 ## Effort Levels
 
 Reasoning effort is a per-task dial, **independent of model tier**. The decomposition brain
