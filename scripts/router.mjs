@@ -263,6 +263,52 @@ export const DEFAULT_REGISTRY = freezeDeep({
         invocation: 'opencode run --agent build -m "xai/grok-4.20-0309-reasoning" "$(cat .ultraswarm-prompt.txt)"'
       }
     }
+  },
+  pi: {
+    specialty: 'provider-agnostic generalist, full-stack, refactors',
+    timeoutMs: 600000,
+    binary: 'pi',
+    models: {
+      simple: {
+        model: 'claude-haiku-4-5',
+        invocation: 'pi -p --provider anthropic --model claude-haiku-4-5 "$(cat .ultraswarm-prompt.txt)"'
+      },
+      moderate: {
+        model: 'claude-sonnet-4-6',
+        invocation: 'pi -p --provider anthropic --model claude-sonnet-4-6 "$(cat .ultraswarm-prompt.txt)"'
+      },
+      complex: {
+        model: 'claude-opus-4-8',
+        invocation: 'pi -p --provider anthropic --model claude-opus-4-8 "$(cat .ultraswarm-prompt.txt)"'
+      },
+      expert: {
+        model: 'claude-opus-4-8',
+        invocation: 'pi -p --provider anthropic --model claude-opus-4-8 --thinking high "$(cat .ultraswarm-prompt.txt)"'
+      }
+    }
+  },
+  'pi-local': {
+    specialty: 'local/private models via Ollama (offline-capable, lower-stakes work)',
+    timeoutMs: 900000,
+    binary: 'pi',
+    models: {
+      simple: {
+        model: 'qwen3-coder:7b',
+        invocation: 'pi -p --provider ollama --model qwen3-coder:7b "$(cat .ultraswarm-prompt.txt)"'
+      },
+      moderate: {
+        model: 'qwen3-coder:30b',
+        invocation: 'pi -p --provider ollama --model qwen3-coder:30b "$(cat .ultraswarm-prompt.txt)"'
+      },
+      complex: {
+        model: 'qwen3-coder:30b',
+        invocation: 'pi -p --provider ollama --model qwen3-coder:30b "$(cat .ultraswarm-prompt.txt)"'
+      },
+      expert: {
+        model: 'qwen3-coder:30b',
+        invocation: 'pi -p --provider ollama --model qwen3-coder:30b "$(cat .ultraswarm-prompt.txt)"'
+      }
+    }
   }
 });
 

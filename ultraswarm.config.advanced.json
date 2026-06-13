@@ -6,9 +6,10 @@
     "grok: from `grok models` (grok-build, grok-composer-2.5-fast)",
     "gemini/agy/droid lower tiers: best-known IDs, re-verify with `/ultraswarm config` — Phase 0's write probe drops any tier whose model is rejected.",
     "Every models block MUST include a 'simple' tier — it is the fallback when a task's tier is not configured.",
-    "intelligence.maxIntelligence (opt-in, default false): flips the ceiling QA slots from Opus to Fable — the always-on security adversarial lens and the expert-escalation review — and allows Fable for expert-tier decomposition. Fable costs ~30% more tokens (tokenizer) plus premium pricing, so it is OFF by default; turn it on only for the most safety-critical work."
+    "intelligence.maxIntelligence (opt-in, default false): flips the ceiling QA slots from Opus to Fable — the always-on security adversarial lens and the expert-escalation review — and allows Fable for expert-tier decomposition. Fable costs ~30% more tokens (tokenizer) plus premium pricing, so it is OFF by default; turn it on only for the most safety-critical work.",
+    "pi/pi-local both run the `pi` binary (earendil-works/pi). pi-local routes through an Ollama provider: register an `ollama` provider + the referenced models in ~/.pi/agent/models.json and `ollama pull` them. The qwen3-coder model IDs are defaults — override to match your locally pulled models."
   ],
-  "enabled": ["codex", "gemini", "grok", "agy", "droid", "opencode"],
+  "enabled": ["codex", "gemini", "grok", "agy", "droid", "opencode", "pi", "pi-local"],
   "intelligence": {
     "promptAnalysis": {
       "enabled": true,
@@ -153,6 +154,46 @@
         "expert": {
           "model": "claude-opus-4-8",
           "invocation": "droid exec -m claude-opus-4-8 -r high \"$(cat .ultraswarm-prompt.txt)\""
+        }
+      }
+    },
+    "pi": {
+      "models": {
+        "simple": {
+          "model": "claude-haiku-4-5",
+          "invocation": "pi -p --provider anthropic --model claude-haiku-4-5 \"$(cat .ultraswarm-prompt.txt)\""
+        },
+        "moderate": {
+          "model": "claude-sonnet-4-6",
+          "invocation": "pi -p --provider anthropic --model claude-sonnet-4-6 \"$(cat .ultraswarm-prompt.txt)\""
+        },
+        "complex": {
+          "model": "claude-opus-4-8",
+          "invocation": "pi -p --provider anthropic --model claude-opus-4-8 \"$(cat .ultraswarm-prompt.txt)\""
+        },
+        "expert": {
+          "model": "claude-opus-4-8",
+          "invocation": "pi -p --provider anthropic --model claude-opus-4-8 --thinking high \"$(cat .ultraswarm-prompt.txt)\""
+        }
+      }
+    },
+    "pi-local": {
+      "models": {
+        "simple": {
+          "model": "qwen3-coder:7b",
+          "invocation": "pi -p --provider ollama --model qwen3-coder:7b \"$(cat .ultraswarm-prompt.txt)\""
+        },
+        "moderate": {
+          "model": "qwen3-coder:30b",
+          "invocation": "pi -p --provider ollama --model qwen3-coder:30b \"$(cat .ultraswarm-prompt.txt)\""
+        },
+        "complex": {
+          "model": "qwen3-coder:30b",
+          "invocation": "pi -p --provider ollama --model qwen3-coder:30b \"$(cat .ultraswarm-prompt.txt)\""
+        },
+        "expert": {
+          "model": "qwen3-coder:30b",
+          "invocation": "pi -p --provider ollama --model qwen3-coder:30b \"$(cat .ultraswarm-prompt.txt)\""
         }
       }
     }
