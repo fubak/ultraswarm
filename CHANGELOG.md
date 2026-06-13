@@ -430,6 +430,8 @@ existing feature set is now proven.
 - Packaged as a single-plugin marketplace (`.claude-plugin/`), MIT licensed,
   with README, design spec, implementation plan, and CLI verification registry.
 
+[3.1.0]: https://github.com/fubak/ultraswarm/compare/v3.0.0...v3.1.0
+[3.0.0]: https://github.com/fubak/ultraswarm/compare/v2.4.3...v3.0.0
 [2.2.0]: https://github.com/fubak/ultraswarm/releases/tag/v2.2.0
 [2.1.0]: https://github.com/fubak/ultraswarm/releases/tag/v2.1.0
 [2.0.0]: https://github.com/fubak/ultraswarm/releases/tag/v2.0.0

@@ -5,6 +5,16 @@ Grok, and shell usage. One standalone Node runner owns decomposition, worker
 routing, process supervision, isolated Git worktrees, adaptive review,
 transactional integration, approvals, recovery, and reporting.
 
+## What's New In v3.1
+
+- **`pi` worker** — the provider-agnostic [`pi`](https://github.com/earendil-works/pi)
+  coding CLI (Anthropic Claude spread by default). See [Local / Private Models](#local--private-models-ollama).
+- **`pi-local` worker** — an always-on local/private worker that drives **Ollama** models
+  through the same `pi` binary for fully offline-capable runs.
+- **Per-task effort levels** — the decomposition brain assigns reasoning `effort` per task,
+  independent of model tier, defaulting to `low`, with effort-first QA escalation. See
+  [Effort Levels](#effort-levels).
+
 ## What Changed In v3
 
 - SQLite state and append-only events under `.ultraswarm/state.sqlite`
@@ -86,6 +96,7 @@ Create a plan:
       "files": ["test/api.test.mjs"],
       "complexity_score": 25,
       "risk": "routine",
+      "effort": "low",
       "dependencies": [],
       "prompt": "Add focused regression tests for invalid request handling.",
       "contract": {
@@ -98,9 +109,9 @@ Create a plan:
 }
 ```
 
-`cli` and `model_tier` are optional. When omitted, ultraswarm ranks healthy
-workers using capability fit and repository-local pass, latency, and cost
-history.
+`cli`, `model_tier`, and `effort` are optional. When `cli`/`model_tier` are omitted,
+ultraswarm ranks healthy workers using capability fit and repository-local pass, latency,
+and cost history. When `effort` is omitted it defaults to `low` (see [Effort Levels](#effort-levels)).
 
 Preview without executing:
 
@@ -224,7 +235,9 @@ reserved for genuinely hard reasoning.
 
 Effort is injected per CLI for the workers that expose the dial (`codex`, `droid`, `pi`); other
 workers ignore it. On QA failure, ultraswarm escalates **effort first** (low → medium → high)
-before stepping up the model tier — the cheapest correction rung first.
+before spending more — the cheapest correction rung first. Routine tasks climb effort within
+their model tier; high-risk and complex tasks use the full ladder, stepping up the model tier
+only after effort tops out.
 
 Set `effort` explicitly on a task in your plan JSON to override, or override `effortFlags` per CLI
 in `ultraswarm.config.json` (see `ultraswarm.config.advanced.json`).
