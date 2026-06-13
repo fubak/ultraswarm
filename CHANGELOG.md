@@ -30,9 +30,22 @@ Major orchestration redesign focused on durability, safety, and measurable worke
 - High-risk tasks receive automatic alternate workers when the healthy roster permits competition.
 - Target-branch movement blocks merge and enters recoverable `stale_base` state.
 - v2 JSONL journals are not resumed as v3 runs.
+- Concurrent worker subprocesses are capped at `policy.maxParallelWorkers`.
+- `forbiddenPaths` is enforced against the files a worker actually changed, not only the declared task files.
+- Worker logs redact format-based secrets (`sk-ant-`/`sk-`/`gh*_` keys, JWTs, and `Authorization: Bearer` values), not just keyword assignments.
+- `maxCostUsd` counts brain (model) spend as well as worker spend, so the budget ceiling is real.
+- High-risk tasks that cannot field at least two usable workers are tombstoned rather than approved without competition.
+
+### Reliability
+- Every task is accounted for as merged, failed, or blocked; a thrown task can no longer vanish, and a mid-run merge failure still returns a complete, persisted result.
+- Worktrees and `ultraswarm/*` branches are cleaned up after every run (and the integration worktree after merge); a crashed attempt resets its worktree before retry.
+- SQLite uses WAL with `SQLITE_BUSY` retries and a stepwise migration runner; read-only commands keep working against a newer-schema database.
+- `resume` recovers a crashed `running` run and a conflicted rebase (with `rebase --abort`), and merge approval is revoked in the store on `stale_base` so re-approval is mandatory.
+- `cancel` escalates to `SIGKILL` and marks attempts cancelled; `export` fails loud on an unknown run id.
+- The standalone runner refuses to start on Node < 22 with a clear message instead of a cryptic module crash.
 
 ### Validation
-- 95 tests cover orchestration, integration isolation, state, policy, routing, supervision, and host parity.
+- 130 tests cover orchestration, integration isolation, state, policy, routing, supervision, host parity, and the safety/reliability hardening above.
 
 ## [2.4.3] — 2026-06-12
 
