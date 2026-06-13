@@ -5,6 +5,14 @@ Grok, and shell usage. One standalone Node runner owns decomposition, worker
 routing, process supervision, isolated Git worktrees, adaptive review,
 transactional integration, approvals, recovery, and reporting.
 
+## What's New In v3.2
+
+- **User-defined harness aliases** — register your own CLI entries under a new top-level
+  `aliases` config key. Each alias `extends` a built-in (inheriting its binary, timeout,
+  effort flags, and capabilities), overrides only its specialty / models / invocation, and can
+  cap routing with `maxTier`. Generalizes the previously hardcoded `pi-local`; strictly opt-in.
+  See [Harness Aliases](#harness-aliases-custom-cli-entries).
+
 ## What's New In v3.1
 
 - **`pi` worker** — the provider-agnostic [`pi`](https://github.com/earendil-works/pi)
@@ -194,7 +202,7 @@ Project configuration overrides the global
 `~/.claude/ultraswarm.config.json`. For container isolation, set `containerImage` to an image containing the selected worker CLIs. Network denial requires container
 isolation and is rejected when configured with native isolation.
 
-### Harness aliases (custom CLI entries)
+## Harness Aliases (Custom CLI Entries)
 
 Beyond the built-in CLIs, you can register your own named entries under `aliases`. An alias
 `extends` a built-in (inheriting its binary, timeout, effort flags, and capabilities) and
@@ -203,7 +211,7 @@ you run several local models, each tuned for a job, through one CLI binary:
 
 ```json
 {
-  "enabled": ["codex", "pi-qwen-coder", "pi-deepseek-docs"],
+  "enabled": ["codex", "pi-qwen-coder"],
   "aliases": {
     "pi-qwen-coder": {
       "extends": "pi",
