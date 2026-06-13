@@ -200,7 +200,7 @@ describe('router', () => {
         () => resolveRoute({ cli: 'claude' }),
         (err) => {
           assert(err.message.includes('Unknown cli "claude"'));
-          assert(err.message.includes('codex, gemini, grok, agy, droid, opencode'));
+          assert(err.message.includes('codex, gemini, grok, agy, droid, opencode, pi'));
           return true;
         }
       );
@@ -247,6 +247,20 @@ describe('router', () => {
 
       r = resolveRoute({ cli: 'gemini', model_tier: 'simple' });
       assert.strictEqual(r.timeoutMs, DEFAULT_REGISTRY.gemini.timeoutMs);
+    });
+
+    it('pi routes the Anthropic spread by tier; expert adds --thinking high', () => {
+      assert.match(
+        resolveRoute({ cli: 'pi', model_tier: 'simple' }).command,
+        /^pi -p --provider anthropic --model claude-haiku-4-5 "\$\(cat \.ultraswarm-prompt\.txt\)"$/
+      );
+      assert.match(
+        resolveRoute({ cli: 'pi', model_tier: 'moderate' }).command,
+        /--model claude-sonnet-4-6/
+      );
+      const expert = resolveRoute({ cli: 'pi', complexity_score: 200 });
+      assert.strictEqual(expert.tier, 'expert');
+      assert.match(expert.command, /--model claude-opus-4-8 --thinking high/);
     });
   });
 });
