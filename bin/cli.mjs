@@ -52,7 +52,7 @@ async function loadPlan(args, context) {
   const task = value(args, '--decompose')
   if (planFile) return JSON.parse(fs.readFileSync(path.resolve(planFile), 'utf8'))
   if (task) {
-    const result = await decompose(brain(), task, context.repo, resolveBrainModel('opus', context.config).model)
+    const result = await decompose(brain(), task, context.repo, resolveBrainModel('opus', context.config).model, context.config)
     if (!result) throw new Error('decomposition failed')
     return result
   }
