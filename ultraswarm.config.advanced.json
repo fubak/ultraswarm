@@ -7,7 +7,8 @@
     "gemini/agy/droid lower tiers: best-known IDs, re-verify with `/ultraswarm config` — Phase 0's write probe drops any tier whose model is rejected.",
     "Every models block MUST include a 'simple' tier — it is the fallback when a task's tier is not configured.",
     "intelligence.maxIntelligence (opt-in, default false): flips the ceiling QA slots from Opus to Fable — the always-on security adversarial lens and the expert-escalation review — and allows Fable for expert-tier decomposition. Fable costs ~30% more tokens (tokenizer) plus premium pricing, so it is OFF by default; turn it on only for the most safety-critical work.",
-    "pi/pi-local both run the `pi` binary (earendil-works/pi). pi-local routes through an Ollama provider: register an `ollama` provider + the referenced models in ~/.pi/agent/models.json and `ollama pull` them. The qwen3-coder model IDs are defaults — override to match your locally pulled models."
+    "pi/pi-local both run the `pi` binary (earendil-works/pi). pi-local routes through an Ollama provider: register an `ollama` provider + the referenced models in ~/.pi/agent/models.json and `ollama pull` them. The qwen3-coder model IDs are defaults — override to match your locally pulled models.",
+    "effortFlags (per CLI: codex/droid/pi) maps an effort level to the flag spliced into the {{EFFORT}} slot of that CLI's invocation. Tasks default to effort 'low'; the QA loop escalates effort before model tier."
   ],
   "enabled": ["codex", "gemini", "grok", "agy", "droid", "opencode", "pi", "pi-local"],
   "intelligence": {
@@ -38,6 +39,13 @@
   "overrides": {
     "codex": {
       "timeoutMs": 900000,
+      "effortFlags": {
+        "off": "-c model_reasoning_effort=minimal",
+        "low": "-c model_reasoning_effort=low",
+        "medium": "-c model_reasoning_effort=medium",
+        "high": "-c model_reasoning_effort=high",
+        "xhigh": "-c model_reasoning_effort=high"
+      },
       "models": {
         "simple": {
           "model": "gpt-5.4-mini",

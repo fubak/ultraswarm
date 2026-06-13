@@ -17,6 +17,12 @@ All notable changes to ultraswarm are documented here. The format is based on
   provider in `~/.pi/agent/models.json`; see the README.
 - Optional `binary` field on registry entries so a logical worker can map to a different
   executable (`pi-local` → `pi`); `ShellWorkerAdapter` now probes the resolved binary.
+- **Per-task effort levels** — the decomposition brain assigns `effort`
+  (`off`/`low`/`medium`/`high`/`xhigh`) per task, independent of model tier, defaulting to `low`.
+  Injected per CLI for `codex`/`droid`/`pi` via a `{{EFFORT}}` slot + `effortFlags` map.
+- **Effort-first escalation** — on QA failure the attempt loop climbs effort
+  (low → medium → high) before stepping up the model tier, so the cheapest correction is tried
+  first. Expert-tier tasks now run at low effort by default and escalate as needed.
 
 ## [3.0.0] - 2026-06-13
 
