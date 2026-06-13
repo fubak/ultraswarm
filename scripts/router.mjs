@@ -4,6 +4,9 @@ import path from 'node:path';
 
 const VALID_TIERS = ['simple', 'moderate', 'complex', 'expert'];
 const VALID_TIER_SET = new Set(VALID_TIERS);
+const VALID_EFFORTS = ['off', 'low', 'medium', 'high', 'xhigh'];
+const VALID_EFFORT_SET = new Set(VALID_EFFORTS);
+const DEFAULT_EFFORT = 'low';
 const VALID_CLAUDE_MODELS = new Set(['haiku', 'sonnet', 'opus', 'fable']);
 const DEFAULT_THRESHOLDS = Object.freeze({ simple: 20, moderate: 50, complex: 100 });
 
