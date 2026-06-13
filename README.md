@@ -194,6 +194,38 @@ Project configuration overrides the global
 `~/.claude/ultraswarm.config.json`. For container isolation, set `containerImage` to an image containing the selected worker CLIs. Network denial requires container
 isolation and is rejected when configured with native isolation.
 
+### Harness aliases (custom CLI entries)
+
+Beyond the built-in CLIs, you can register your own named entries under `aliases`. An alias
+`extends` a built-in (inheriting its binary, timeout, effort flags, and capabilities) and
+overrides only what differs — its specialty, its model tiers, and its invocation. This is how
+you run several local models, each tuned for a job, through one CLI binary:
+
+```json
+{
+  "enabled": ["codex", "pi-qwen-coder", "pi-deepseek-docs"],
+  "aliases": {
+    "pi-qwen-coder": {
+      "extends": "pi",
+      "specialty": "local coding, small refactors, unit tests",
+      "maxTier": "moderate",
+      "models": {
+        "simple": { "model": "qwen3-coder:7b", "invocation": "pi -p --provider ollama --model qwen3-coder:7b --config ~/.pi/lean.json \"$(cat .ultraswarm-prompt.txt)\"" }
+      }
+    }
+  }
+}
+```
+
+- **Lean harness:** put whatever makes a CLI's harness leaner directly in the `invocation`
+  (a `--config` pointing at a stripped-down profile, fewer flags, etc.). Local models often do
+  better with less wrapping.
+- **`maxTier`:** caps the tiers an alias will accept. A task above the cap is clamped down (e.g.
+  an expert task on a `maxTier: moderate` alias runs at moderate), so a small local model is
+  never handed work it can't do.
+- **Opt-in only:** nothing is auto-generated. An alias exists only if you declare it, and is
+  active only when it appears in `enabled` (or when `enabled` is omitted entirely).
+
 ## Local / Private Models (Ollama)
 
 `pi` and `pi-local` are both backed by the [`pi`](https://github.com/earendil-works/pi)
