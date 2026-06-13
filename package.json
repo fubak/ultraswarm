@@ -6,7 +6,8 @@
   "scripts": {
     "test": "node --test",
     "validate": "bash scripts/validate.sh",
-    "generate:skills": "node scripts/generate-host-skills.mjs"
+    "generate:skills": "node scripts/generate-host-skills.mjs",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",

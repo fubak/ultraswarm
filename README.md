@@ -268,6 +268,13 @@ node scripts/generate-host-skills.mjs --check
 Edit `hosts/host-contract.json` or `scripts/generate-host-skills.mjs`, then run
 `node scripts/generate-host-skills.mjs`. Do not hand-edit generated host skills.
 
+A pre-commit hook (in `.githooks/`, auto-enabled by `npm install` via the `prepare` script)
+blocks commits that introduce host-skill drift — the generated `SKILL.md` files must stay in
+sync with `hosts/host-contract.json`. Enable it manually with
+`git config core.hooksPath .githooks`. CI (`.github/workflows/validate.yml`) runs
+`validate.sh` and the full test suite on every PR, and `main` requires a passing CI run
+through a pull request before merge.
+
 ## License
 
 MIT

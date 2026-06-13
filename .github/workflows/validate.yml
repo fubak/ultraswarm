@@ -18,3 +18,5 @@ jobs:
         run: npm ci
       - name: Validate manifests, config, and Workflow template
         run: bash scripts/validate.sh
+      - name: Run full test suite
+        run: node --test

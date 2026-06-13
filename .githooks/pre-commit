@@ -1,0 +1,13 @@
+#!/bin/sh
+# ultraswarm pre-commit guard — block committing generated host-skill drift.
+# Generated host skills (skills/ultraswarm/SKILL.md, hosts/*/skills/ultraswarm/SKILL.md)
+# are produced from hosts/host-contract.json and must never be hand-edited. This catches
+# accidental/contaminated edits (e.g. from the shared projects directory) before commit.
+# Enabled via `git config core.hooksPath .githooks` (auto-set by npm install's prepare script).
+if ! node scripts/generate-host-skills.mjs --check >/dev/null 2>&1; then
+  echo "✗ pre-commit blocked: host skill drift detected." >&2
+  echo "  Generated SKILL.md files differ from hosts/host-contract.json (do not hand-edit them)." >&2
+  echo "  Fix: node scripts/generate-host-skills.mjs   (regenerate from the contract)" >&2
+  echo "  Or revert: git checkout -- skills/ultraswarm/SKILL.md hosts/*/skills/ultraswarm/SKILL.md" >&2
+  exit 1
+fi
