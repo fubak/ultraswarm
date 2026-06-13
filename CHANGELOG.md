@@ -4,7 +4,9 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [3.1.0] - 2026-06-13
+
+New worker integrations and a per-task reasoning-effort axis.
 
 ### Added
 - **`pi` worker** — the provider-agnostic [`pi`](https://github.com/earendil-works/pi)
