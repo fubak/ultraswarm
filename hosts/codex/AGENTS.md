@@ -1,4 +1,13 @@
-# ultraswarm (Codex host launcher)
+# ultraswarm (legacy Codex host launcher)
+
+The preferred Codex integration is the repository's installable skill:
+
+```bash
+bash <path-to-ultraswarm>/scripts/install-codex-skill.sh
+```
+
+Restart Codex, then invoke `$ultraswarm <task>`. Keep this `AGENTS.md` launcher
+only for repositories where installing a user skill is not possible.
 
 When the user asks to run an ultraswarm swarm, do NOT implement the task yourself. Instead:
 1. Explore the repo (conventions, file paths, gate commands).

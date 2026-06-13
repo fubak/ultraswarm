@@ -13,6 +13,10 @@ ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PLUGIN_JSON="$ROOT/.claude-plugin/plugin.json"
 MARKET_JSON="$ROOT/.claude-plugin/marketplace.json"
 SKILL_MD="$ROOT/skills/ultraswarm/SKILL.md"
+CODEX_SKILL_MD="$ROOT/hosts/codex/skills/ultraswarm/SKILL.md"
+CODEX_INSTALLER="$ROOT/scripts/install-codex-skill.sh"
+PACKAGE_JSON="$ROOT/package.json"
+PACKAGE_LOCK_JSON="$ROOT/package-lock.json"
 CONFIG_JSON="$ROOT/ultraswarm.config.example.json"
 ROUTER_MJS="$ROOT/scripts/router.mjs"
 ROUTER_TEST="$ROOT/scripts/router.test.mjs"
@@ -120,23 +124,27 @@ read_version() { # <file> <jq-filter>
 v_plugin="$(read_version "$PLUGIN_JSON" '.version')"
 v_meta="$(read_version "$MARKET_JSON" '.metadata.version')"
 v_entry="$(read_version "$MARKET_JSON" '.plugins[0].version')"
+v_package="$(read_version "$PACKAGE_JSON" '.version')"
+v_lock="$(read_version "$PACKAGE_LOCK_JSON" '.packages[""].version')"
 if [ "$JSON_MODE" -eq 0 ]; then
   echo "      plugin.json .version                  = $v_plugin"
   echo "      marketplace.json .metadata.version    = $v_meta"
   echo "      marketplace.json .plugins[0].version  = $v_entry"
+  echo "      package.json .version                 = $v_package"
+  echo "      package-lock.json root .version       = $v_lock"
 fi
 v3_bad=""
-for v in "$v_plugin" "$v_meta" "$v_entry"; do
+for v in "$v_plugin" "$v_meta" "$v_entry" "$v_package" "$v_lock"; do
   case "$v" in
     "" | "null" | "<missing-file>" | "<jq-error>") v3_bad="yes" ;;
   esac
 done
 if [ -n "$v3_bad" ]; then
   fail "one or more versions are absent/null/unreadable"
-elif [ "$v_plugin" = "$v_meta" ] && [ "$v_meta" = "$v_entry" ]; then
-  pass "all three versions match ($v_plugin)"
+elif [ "$v_plugin" = "$v_meta" ] && [ "$v_meta" = "$v_entry" ] && [ "$v_entry" = "$v_package" ] && [ "$v_package" = "$v_lock" ]; then
+  pass "plugin and npm package versions match ($v_plugin)"
 else
-  fail "version mismatch across manifests"
+  fail "version mismatch across plugin and npm manifests"
 fi
 
 # --- Check 4: Embedded Workflow JS parses -------------------------------------
@@ -202,21 +210,27 @@ else
   fail "ultraswarm.config.example.json is not valid JSON"
 fi
 
-# --- Check 7: Skill frontmatter present ---------------------------------------
-begin_check 7 "Skill frontmatter present"
-first_line="$(head -n 1 "$SKILL_MD")"
-if [ "$first_line" != "---" ]; then
-  fail "SKILL.md first line is not '---' (got '$first_line')"
-else
-  # Inspect the frontmatter block (between the first '---' and the next '---').
-  fm="$(awk 'NR==1{next} /^---$/{exit} {print}' "$SKILL_MD")"
-  if printf '%s\n' "$fm" | grep -q '^name:' && \
-     printf '%s\n' "$fm" | grep -q '^description:'; then
-    pass "frontmatter present with name: and description:"
-  else
-    fail "frontmatter missing name: or description:"
+# --- Check 7: Host skill frontmatter present ----------------------------------
+begin_check 7 "Claude Code and Codex skill frontmatter"
+for skill_file in "$SKILL_MD" "$CODEX_SKILL_MD"; do
+  skill_label="${skill_file#"$ROOT/"}"
+  if [ ! -f "$skill_file" ]; then
+    fail "$skill_label does not exist"
+    continue
   fi
-fi
+  first_line="$(head -n 1 "$skill_file")"
+  if [ "$first_line" != "---" ]; then
+    fail "$skill_label first line is not '---' (got '$first_line')"
+    continue
+  fi
+  fm="$(awk 'NR==1{next} /^---$/{exit} {print}' "$skill_file")"
+  if printf '%s\n' "$fm" | grep -q '^name: ultraswarm$' && \
+     printf '%s\n' "$fm" | grep -q '^description:'; then
+    pass "$skill_label has ultraswarm name and description"
+  else
+    fail "$skill_label frontmatter is missing name: ultraswarm or description:"
+  fi
+done
 
 # --- Check 8: Router module syntax --------------------------------------------
 begin_check 8 "Router module syntax"
@@ -286,6 +300,53 @@ for f in "$ROOT/bin/ultraswarm.mjs" $(find "$ROOT/lib" -name '*.mjs' | sort); do
 done
 if [ -z "$syntax_fail" ]; then
   pass "bin/ultraswarm.mjs and all lib/**/*.mjs pass node --check"
+fi
+
+# --- Check 13: Codex skill contract ------------------------------------------
+begin_check 13 "Codex skill contract"
+codex_contract_bad=""
+for required in '\$ultraswarm <task>' '\$ultraswarm analyze <task>' '\$ultraswarm config' '--plan-file .ultraswarm-plan.json' '--yes' 'explicit user approval'; do
+  if ! grep -q -- "$required" "$CODEX_SKILL_MD" 2>/dev/null; then
+    fail "Codex skill is missing required contract text: $required"
+    codex_contract_bad=yes
+  fi
+done
+if [ -z "$codex_contract_bad" ]; then
+  pass "Codex skill defines invocation modes, plan preview, and approval gate"
+fi
+
+# --- Check 14: Codex installer ------------------------------------------------
+begin_check 14 "Codex skill installer"
+if ! bash -n "$CODEX_INSTALLER" 2>/dev/null; then
+  fail "scripts/install-codex-skill.sh failed bash syntax check"
+else
+  install_tmp="$(mktemp -d)"
+  if CODEX_SKILLS_DIR="$install_tmp/skills" bash "$CODEX_INSTALLER" >/dev/null 2>&1 && \
+     [ -L "$install_tmp/skills/ultraswarm" ] && \
+     [ "$(readlink -f "$install_tmp/skills/ultraswarm")" = "$(readlink -f "$ROOT/hosts/codex/skills/ultraswarm")" ] && \
+     CODEX_SKILLS_DIR="$install_tmp/skills" bash "$CODEX_INSTALLER" >/dev/null 2>&1; then
+    pass "installer creates the ~/.agents-compatible symlink and is idempotent"
+  else
+    fail "installer smoke test failed"
+  fi
+  rm -rf "$install_tmp"
+fi
+
+# --- Check 15: Host installation docs ----------------------------------------
+begin_check 15 "Host-specific installation docs"
+docs_bad=""
+for required in '~/.agents/skills' 'scripts/install-codex-skill.sh' '\$ultraswarm' '/ultraswarm'; do
+  if ! grep -q -- "$required" "$ROOT/README.md"; then
+    fail "README is missing host installation guidance: $required"
+    docs_bad=yes
+  fi
+done
+if grep -q '~/.codex/skills/ultraswarm' "$ROOT/README.md"; then
+  fail "README still recommends the obsolete Codex skill directory"
+  docs_bad=yes
+fi
+if [ -z "$docs_bad" ]; then
+  pass "README distinguishes Codex and Claude Code installation and invocation"
 fi
 
 # --- Summary ------------------------------------------------------------------

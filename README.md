@@ -4,10 +4,11 @@
 
 `ultraswarm` orchestrates a swarm of external AI coding CLIs (codex, gemini, grok, agy, droid, opencode). It analyzes your task's complexity, decomposes it into atomic units, routes each to the best CLI *and* the right model tier within that CLI — fast/cheap models for simple work, powerful models for complex work, with automatic escalation when an attempt fails QA — runs them in isolated git worktrees, QA-reviews every diff, and merges only what passes. Dependent tasks run as chained waves, each re-based on the merged result of the wave before it. The orchestrator never writes feature code; it decomposes, reviews, judges, merges, and reports.
 
-**Run it two ways** (same orchestration core, identical behaviour):
+**Run it three ways** (same orchestration core, identical behaviour):
 
-- **As a [Claude Code](https://claude.com/claude-code) skill** — `/ultraswarm <task>`. Native Workflow engine with live `/workflows` progress and resume. → [Installation](#installation) · [Usage](#usage)
-- **As a standalone CLI** — `node bin/ultraswarm.mjs …`, **hosted from Codex, Grok, or any shell — no Claude Code required**. → [Running from any CLI](#running-from-any-cli-codex--grok--shell)
+- **As a [Claude Code](https://claude.com/claude-code) skill** — `/ultraswarm <task>`. Native Workflow engine with live `/workflows` progress and resume. → [Claude Code installation](#claude-code)
+- **As a Codex skill** — `$ultraswarm <task>`. Codex plans and launches the standalone runner. → [Codex installation](#codex)
+- **As a standalone CLI** — `node bin/ultraswarm.mjs …`, hosted from Grok or any shell. → [Running from any CLI](#running-from-any-cli-codex--grok--shell)
 
 As of v2.1 the full pipeline is **live-validated end-to-end**: competition + judge panel + 3-lens adversarial QA, model escalation, dependency waves, and resume-from-checkpoint have all been exercised on real multi-task runs (the swarm built this repo's own config validator as its test workload).
 
@@ -21,7 +22,7 @@ As of v2.1 the full pipeline is **live-validated end-to-end**: competition + jud
 - [Why use it](#why-use-it)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
-- [Usage](#usage)
+- [Claude Code Usage](#claude-code-usage)
 - [Running from any CLI (Codex / Grok / shell)](#running-from-any-cli-codex--grok--shell)
 - [Choosing which CLIs to use](#choosing-which-clis-to-use)
 - [The worker registry](#the-worker-registry)
@@ -104,7 +105,7 @@ Enhanced failure analysis with complexity reassessment, model tier recommendatio
 
 ## Prerequisites
 
-**Common to both run modes:**
+**Common to all run modes:**
 
 - **A git repository.** ultraswarm works exclusively through git worktrees (created under `~/worktrees/` by default).
 - **At least two healthy external coding CLIs.** ultraswarm needs ≥2 working CLIs or it stops (it will not silently fall back to the orchestrator coding everything). Install and authenticate the ones you want:
@@ -134,9 +135,14 @@ Enhanced failure analysis with complexity reassessment, model tier recommendatio
 
 ## Installation
 
+Claude Code and Codex use different skill registries and invocation syntax.
+Install the integration for the host you use.
+
+### Claude Code
+
 ultraswarm is packaged as a Claude Code plugin. **Pick one** of the two methods below — don't do both, or the skill will be registered twice.
 
-### Method A — Plugin (recommended)
+#### Method A — Plugin (recommended)
 
 The repo is its own single-plugin marketplace. From inside Claude Code:
 
@@ -147,7 +153,7 @@ The repo is its own single-plugin marketplace. From inside Claude Code:
 
 That's it — `/ultraswarm` is available after the plugin loads. Update later with `/plugin marketplace update ultraswarm`. This pulls from the repo's default branch, so no manual clone is needed.
 
-### Method B — Manual symlink (for local development)
+#### Method B — Manual symlink (for local development)
 
 Use this if you're hacking on the skill itself and want a live-editable checkout.
 
@@ -165,9 +171,35 @@ head -3 ~/.claude/skills/ultraswarm/SKILL.md
 
 The skill registry loads at session start, so `/ultraswarm` becomes available in your **next** Claude Code session. Symlinking (rather than copying) means `git pull` in the repo updates the live skill automatically.
 
+### Codex
+
+Codex discovers user skills from `~/.agents/skills`, not `~/.codex/skills`.
+The Codex integration uses the standalone runner, so keep a checkout of the
+repository and install its host-specific skill as a live symlink:
+
+```bash
+git clone https://github.com/fubak/ultraswarm.git ~/projects/ultraswarm
+cd ~/projects/ultraswarm
+npm install
+bash scripts/install-codex-skill.sh
+```
+
+The installer creates:
+
+```text
+~/.agents/skills/ultraswarm -> ~/projects/ultraswarm/hosts/codex/skills/ultraswarm
+```
+
+Restart Codex after installation, then verify the skill appears in `/skills`.
+Invoke it explicitly with `$ultraswarm`; `/ultraswarm` is Claude Code syntax.
+
+For a checkout outside `~/projects/ultraswarm`, the symlink lets the skill find
+the runner automatically. Set `ULTRASWARM_HOME=/absolute/path/to/ultraswarm` if
+you replace the symlink with a copied skill directory.
+
 ---
 
-## Usage
+## Claude Code Usage
 
 From within a git repository, in Claude Code:
 
@@ -236,7 +268,22 @@ Flags: `--plan-file <json>` (host-supplied plan) · `--decompose "<task>"` (buil
 
 ### From Codex
 
-Copy `hosts/codex/AGENTS.md` into your repo — Codex reads `AGENTS.md` from the working directory. Then ask Codex to *"run an ultraswarm swarm to &lt;task&gt;"*: it explores the repo, writes `.ultraswarm-plan.json`, shows you the plan, and on approval runs the `--plan-file` command above and relays the report. It never writes the feature code itself.
+Install the Codex skill once using the [Codex installation](#codex), then run
+it from any target git repository:
+
+```text
+$ultraswarm add a rate limiter with unit tests
+$ultraswarm analyze migrate the date helpers from moment to date-fns
+$ultraswarm config
+```
+
+For a full run, Codex explores the repository, writes
+`.ultraswarm-plan.json`, validates and shows the plan, and waits for approval
+before running `--plan-file ... --yes`. It never writes the feature code itself.
+
+`hosts/codex/AGENTS.md` remains as a legacy fallback for environments where
+user skills cannot be installed. Do not use both mechanisms in the same target
+repository, because they duplicate the host instructions.
 
 ### From Grok (or any other agent)
 
@@ -484,7 +531,7 @@ ultraswarm/
 ├── package.json · package-lock.json            ← deps for the standalone runner (ajv, @anthropic-ai/sdk)
 ├── ultraswarm.config.example.json              ← starter CLI-selection config (minimal)
 ├── ultraswarm.config.advanced.json             ← full intelligence config, verified model IDs
-├── skills/ultraswarm/SKILL.md                  ← the Claude Code skill (canonical orchestrator)
+├── skills/ultraswarm/SKILL.md                  ← Claude Code skill (native Workflow orchestrator)
 ├── bin/
 │   └── ultraswarm.mjs                          ← standalone runner CLI (--plan-file / --decompose / --resume)
 ├── lib/                                         ← standalone runner internals (shares the pure core with the skill)
@@ -495,11 +542,14 @@ ultraswarm/
 │   ├── llm/{client,anthropic,claude-cli,brain-router}.mjs   ← brain adapters (claude -p default, API fallback)
 │   └── orchestrator/{waves,implement,merge,report,runner,core,decompose}.mjs
 ├── hosts/
-│   ├── codex/AGENTS.md                         ← Codex launcher (decompose → --plan-file)
+│   ├── codex/
+│   │   ├── skills/ultraswarm/SKILL.md          ← Codex user skill ($ultraswarm)
+│   │   └── AGENTS.md                           ← legacy Codex launcher fallback
 │   └── grok/ultraswarm.md                      ← Grok launcher
 ├── fixtures/fake-cli.mjs                        ← test fixture: a fake worker CLI
 ├── scripts/
-│   ├── validate.sh                             ← release validator, 12 checks (supports --json)
+│   ├── install-codex-skill.sh                  ← symlinks Codex skill into ~/.agents/skills
+│   ├── validate.sh                             ← release validator (supports --json)
 │   ├── router.mjs                              ← model router: loadConfig / validateConfig / resolveRoute
 │   ├── router.test.mjs                         ← 18-case node:test suite for the router
 │   ├── workflow-harness.test.mjs               ← behavior tests for the embedded Workflow JS
@@ -517,7 +567,7 @@ ultraswarm/
 
 > `router.mjs`, its tests, and the validate.sh wiring were **built by the swarm itself** during the v2.1 live validation — the test workload doubled as the repo's own tooling. The behavior harness (check [11]) tests the orchestration logic in the skill's embedded Workflow JS on every push, so QA-gate regressions break CI before they can burn tokens in a live run.
 
-> Note: the implementation plan's embedded skill template is intentionally **historical** — it predates the fixes made during review and the end-to-end test. `skills/ultraswarm/SKILL.md` is the only canonical copy.
+> Note: the implementation plan's embedded skill template is intentionally **historical** — it predates the fixes made during review and the end-to-end test. `skills/ultraswarm/SKILL.md` is canonical for Claude Code; `hosts/codex/skills/ultraswarm/SKILL.md` is canonical for Codex.
 
 ---
 
