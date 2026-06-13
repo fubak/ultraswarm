@@ -1,8 +1,8 @@
 {
   "contract": 1,
   "files": {
-    "skills/ultraswarm/SKILL.md": "0e152bb622adb141cd70ca89621a74af0890b0f7fc31f2fc93d14948494db947",
-    "hosts/codex/skills/ultraswarm/SKILL.md": "5dfdedfc832b3251c15bd764bb5bf740001ff618ef7cdb80b2bc2858a4e1e9a4",
-    "hosts/grok/skills/ultraswarm/SKILL.md": "2c27b092e51af59ae1e44164c11fb2391d916c5f4d953f9cbfef9dc150a14f4e"
+    "skills/ultraswarm/SKILL.md": "6e40fb5d25c53a3cb3b334610244772b1d5ae163bcb162cc5ad0d63907026238",
+    "hosts/codex/skills/ultraswarm/SKILL.md": "74e40350ba2d1273207a63bf2d7fc2a2c522e703d2689b91510390282e677f48",
+    "hosts/grok/skills/ultraswarm/SKILL.md": "51888e5c3e107991b3ed212a214d0e8ff70f25aab1a565c62e218e4533b69cd7"
   }
 }

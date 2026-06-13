@@ -42,6 +42,7 @@ Never translate approval from an earlier conversation into either runner approva
 - \`cancel <run-id>\`: terminate worker process trees and mark cancelled.
 - \`resume <run-id>\`: recover an awaiting-merge or stale-base run.
 - \`export <run-id>\`: machine-readable provenance bundle.
+- User-defined \`aliases\` in config appear in the roster alongside built-in CLIs; \`doctor\`/\`workers\` and \`explain-routing\` show them, and the decomposition roster routes to them by specialty (respecting any \`maxTier\` cap).
 
 ## Plan Contract
 

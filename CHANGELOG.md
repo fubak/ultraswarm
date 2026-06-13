@@ -4,6 +4,15 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.2.0] - 2026-06-13
+
+### Added
+- **User-defined harness aliases.** Register custom CLI entries under a new `aliases` config key.
+  Each alias `extends` a built-in (inheriting binary, timeout, effort flags, and capabilities) and
+  overrides its specialty, model tiers, and invocation — generalizing the previously hardcoded
+  `pi-local`. Supports an optional `maxTier` cap (tasks above it are clamped down) and routes by
+  specialty like the built-ins. Strictly opt-in: with no `aliases`, behavior is unchanged.
+
 ## [3.1.0] - 2026-06-13
 
 New worker integrations and a per-task reasoning-effort axis.
@@ -430,6 +439,7 @@ existing feature set is now proven.
 - Packaged as a single-plugin marketplace (`.claude-plugin/`), MIT licensed,
   with README, design spec, implementation plan, and CLI verification registry.
 
+[3.2.0]: https://github.com/fubak/ultraswarm/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/fubak/ultraswarm/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/fubak/ultraswarm/compare/v2.4.3...v3.0.0
 [2.2.0]: https://github.com/fubak/ultraswarm/releases/tag/v2.2.0
