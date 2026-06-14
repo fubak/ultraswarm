@@ -16,6 +16,8 @@ import { buildReport, cleanup } from '../lib/orchestrator/report.mjs'
 import { decompose } from '../lib/orchestrator/decompose.mjs'
 import { AnthropicClient } from '../lib/llm/anthropic.mjs'
 import { ClaudeCliClient } from '../lib/llm/claude-cli.mjs'
+import { MockLlmClient } from '../lib/llm/mock-client.mjs'
+import { mockBrainBehavior } from '../lib/llm/mock-brain.mjs'
 import { resolveBrainModel } from '../lib/llm/brain-router.mjs'
 
 export const EXIT = { OK: 0, RUNTIME: 1, USAGE: 2, APPROVAL: 3, BLOCKED: 4 }
@@ -32,6 +34,7 @@ export function detectGates(repo) {
 }
 
 function brain() {
+  if (process.env.ULTRASWARM_BRAIN === 'mock') return new MockLlmClient(mockBrainBehavior)
   if (process.env.ULTRASWARM_BRAIN === 'anthropic-api') return new AnthropicClient()
   if (process.env.ULTRASWARM_BRAIN === 'claude-cli') return new ClaudeCliClient()
   try { execFileSync('claude', ['--version'], { stdio: 'ignore' }); return new ClaudeCliClient() } catch { return new AnthropicClient() }
@@ -60,7 +63,7 @@ async function loadPlan(args, context) {
 }
 
 export function routePlan(plan, context, manager, store = null) {
-  const check = validatePlan(plan)
+  const check = validatePlan(plan, context.config)
   if (!check.valid) throw new Error(`invalid plan: ${check.errors.join('; ')}`)
   const enabled = context.config.enabled
   const probes = manager.probes(enabled)
