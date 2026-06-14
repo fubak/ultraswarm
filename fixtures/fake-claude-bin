@@ -1,0 +1,10 @@
+#!/usr/bin/env node
+// Fake claude CLI for testing defaultRun in claude-cli.mjs.
+// Ignores all args passed by buildArgs. Outputs a valid claude -p JSON envelope.
+process.stdout.write(JSON.stringify({
+  type: 'result',
+  subtype: 'success',
+  is_error: false,
+  result: '{"ok":true}',
+  usage: { input_tokens: 5, output_tokens: 2 },
+}))
