@@ -4,6 +4,23 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.2.1] - 2026-06-13
+
+### Fixed
+- **forbiddenPaths bypass via new directories.** The implement step listed worker output with
+  `git status --porcelain`, which collapses a brand-new untracked directory to `dir/`. A worker
+  writing a forbidden file into a new subdirectory (e.g. `vault/leak.secret`) was reported as
+  `vault/` and slipped past the `forbiddenPaths` policy. Now uses `-uall` so files are listed
+  individually and enforced correctly.
+- **Aliases could not be pinned in a plan.** `validatePlan` validated `task.cli` against the
+  built-in registry only, rejecting user-defined alias names even though routing supports explicit
+  alias selection. It now validates against the effective registry (built-ins + configured aliases).
+
+### Added
+- Deterministic, network-free end-to-end test harness that drives the real runner in-process
+  (`ULTRASWARM_BRAIN=mock` seam + fake worker fixtures), plus a broad unit-coverage lift
+  (branch coverage 77% → 86%; suite 178 → 309 tests).
+
 ## [3.2.0] - 2026-06-13
 
 ### Added
@@ -439,6 +456,7 @@ existing feature set is now proven.
 - Packaged as a single-plugin marketplace (`.claude-plugin/`), MIT licensed,
   with README, design spec, implementation plan, and CLI verification registry.
 
+[3.2.1]: https://github.com/fubak/ultraswarm/compare/v3.2.0...v3.2.1
 [3.2.0]: https://github.com/fubak/ultraswarm/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/fubak/ultraswarm/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/fubak/ultraswarm/compare/v2.4.3...v3.0.0
