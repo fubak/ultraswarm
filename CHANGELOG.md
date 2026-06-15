@@ -4,6 +4,20 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.3.0] - 2026-06-15
+
+### Added
+- **`small-harness` worker** — [SmallHarness](https://github.com/GetSmallAI/SmallHarness), a
+  terminal-first Rust coding agent with native MCP integration, multi-backend support (OpenAI,
+  OpenRouter, Ollama, LM Studio, MLX, llama.cpp), and real-time cost tracking. Built-in tier
+  mapping: `simple` → OpenAI `gpt-4o-mini`; `moderate`/`complex`/`expert` → OpenRouter
+  Claude (Sonnet 4.6 / Opus 4.8). Backend and model are injected via `BACKEND` and
+  `AGENT_MODEL` environment variables; add `OPENAI_API_KEY` and `OPENROUTER_API_KEY` to
+  `workerEnvAllowlist` to pass credentials through. Custom local-model invocations are
+  supported via the standard `overrides` config key.
+- **SmallHarness host skill** — ultraswarm SKILL.md for the SmallHarness → ultraswarm
+  direction, allowing SmallHarness sessions to invoke ultraswarm as an orchestration tool.
+
 ## [3.2.1] - 2026-06-13
 
 ### Fixed
