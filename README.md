@@ -272,6 +272,14 @@ To route `simple` tasks through a local Ollama model instead, override in `ultra
 > tool calls in one-shot mode. Do not omit this flag in custom invocations or the worker will
 > silently deny every tool call and produce no file changes.
 
+> **API keys:** SmallHarness inherits only the variables in `workerEnvAllowlist`. The built-in
+> defaults need `OPENAI_API_KEY` (simple tier) and `OPENROUTER_API_KEY` (moderate/complex/expert).
+> Add both to your config:
+>
+> ```json
+> { "workerEnvAllowlist": ["OPENAI_API_KEY", "OPENROUTER_API_KEY"] }
+> ```
+
 ## Local / Private Models (Ollama)
 
 `pi` and `pi-local` are both backed by the [`pi`](https://github.com/earendil-works/pi)
