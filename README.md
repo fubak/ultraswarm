@@ -80,7 +80,7 @@ contract is at `hosts/grok/skills/ultraswarm/SKILL.md`.
 - A Git repository
 - Node 22+
 - At least two authenticated worker CLIs from `codex`, `gemini`, `grok`, `agy`,
-  `droid`, `opencode`, `pi`, and `pi-local`
+  `droid`, `opencode`, `pi`, `pi-local`, and `small-harness`
 - An authenticated `claude` CLI for the default QA/decomposition brain, or
   `ANTHROPIC_API_KEY` with `ULTRASWARM_BRAIN=anthropic-api`
 
@@ -233,6 +233,52 @@ you run several local models, each tuned for a job, through one CLI binary:
   never handed work it can't do.
 - **Opt-in only:** nothing is auto-generated. An alias exists only if you declare it, and is
   active only when it appears in `enabled` (or when `enabled` is omitted entirely).
+
+## SmallHarness Worker
+
+[SmallHarness](https://github.com/GetSmallAI/SmallHarness) is a terminal-first coding agent written in Rust that supports multiple AI backends (OpenAI, OpenRouter, Ollama, LM Studio, MLX, llama.cpp). As an ultraswarm worker it brings:
+
+- **Multi-backend routing**: switch between cloud and local models per-task via overrides
+- **MCP integration**: native Model Context Protocol support for extended tool sets
+- **Cost tracking**: real-time per-turn and session cost accounting
+
+SmallHarness must be installed separately:
+
+```sh
+cargo install small-harness
+```
+
+Add `small-harness` to `enabled` to activate it. The built-in defaults use the OpenAI backend for `simple` tasks and OpenRouter (Claude) for `moderate`/`complex`/`expert`. Backend and model are passed via environment variables — SmallHarness reads `BACKEND` and `AGENT_MODEL` from the environment, not CLI flags.
+
+To route `simple` tasks through a local Ollama model instead, override in `ultraswarm.config.json`:
+
+```json
+{
+  "enabled": ["codex", "small-harness"],
+  "overrides": {
+    "small-harness": {
+      "models": {
+        "simple": {
+          "model": "qwen3-coder:7b",
+          "invocation": "BACKEND=ollama AGENT_MODEL=qwen3-coder:7b small-harness --allow-tools --print \"$(cat .ultraswarm-prompt.txt)\""
+        }
+      }
+    }
+  }
+}
+```
+
+> **Tool approval:** ultraswarm always passes `--allow-tools` so SmallHarness auto-approves
+> tool calls in one-shot mode. Do not omit this flag in custom invocations or the worker will
+> silently deny every tool call and produce no file changes.
+
+> **API keys:** SmallHarness inherits only the variables in `workerEnvAllowlist`. The built-in
+> defaults need `OPENAI_API_KEY` (simple tier) and `OPENROUTER_API_KEY` (moderate/complex/expert).
+> Add both to your config:
+>
+> ```json
+> { "workerEnvAllowlist": ["OPENAI_API_KEY", "OPENROUTER_API_KEY"] }
+> ```
 
 ## Local / Private Models (Ollama)
 
