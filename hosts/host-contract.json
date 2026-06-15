@@ -7,6 +7,7 @@
   "hosts": {
     "claude": { "skill": "skills/ultraswarm/SKILL.md", "invocation": "/ultraswarm" },
     "codex": { "skill": "hosts/codex/skills/ultraswarm/SKILL.md", "invocation": "$ultraswarm" },
-    "grok": { "skill": "hosts/grok/skills/ultraswarm/SKILL.md", "invocation": "ultraswarm" }
+    "grok": { "skill": "hosts/grok/skills/ultraswarm/SKILL.md", "invocation": "ultraswarm" },
+    "small-harness": { "skill": "hosts/small-harness/skills/ultraswarm/SKILL.md", "invocation": "node ${ULTRASWARM_HOME:-$HOME/projects/ultraswarm}/bin/ultraswarm.mjs" }
   }
 }

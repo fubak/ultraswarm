@@ -3,6 +3,7 @@
   "files": {
     "skills/ultraswarm/SKILL.md": "6e40fb5d25c53a3cb3b334610244772b1d5ae163bcb162cc5ad0d63907026238",
     "hosts/codex/skills/ultraswarm/SKILL.md": "74e40350ba2d1273207a63bf2d7fc2a2c522e703d2689b91510390282e677f48",
-    "hosts/grok/skills/ultraswarm/SKILL.md": "51888e5c3e107991b3ed212a214d0e8ff70f25aab1a565c62e218e4533b69cd7"
+    "hosts/grok/skills/ultraswarm/SKILL.md": "51888e5c3e107991b3ed212a214d0e8ff70f25aab1a565c62e218e4533b69cd7",
+    "hosts/small-harness/skills/ultraswarm/SKILL.md": "902378a124fb7bd2d8e2855541c246cbd073ff9a8927ae74ac17b13076428124"
   }
 }
