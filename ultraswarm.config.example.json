@@ -1,5 +1,6 @@
 {
-  "enabled": ["codex", "gemini", "grok", "agy", "droid", "opencode", "pi", "pi-local"],
+  "enabled": ["codex", "gemini", "grok", "agent"],
+  "workerEnvAllowlist": ["CURSOR_API_KEY"],
   "overrides": {
     "codex": { "timeoutMs": 900000 },
     "opencode": { "invocation": "opencode run --agent build -m \"xai/grok-4.3\" \"$(cat .ultraswarm-prompt.txt)\"" },

@@ -14,7 +14,9 @@ PLUGIN_JSON="$ROOT/.claude-plugin/plugin.json"
 MARKET_JSON="$ROOT/.claude-plugin/marketplace.json"
 SKILL_MD="$ROOT/skills/ultraswarm/SKILL.md"
 CODEX_SKILL_MD="$ROOT/hosts/codex/skills/ultraswarm/SKILL.md"
+CURSOR_SKILL_MD="$ROOT/hosts/agent/skills/ultraswarm/SKILL.md"
 CODEX_INSTALLER="$ROOT/scripts/install-codex-skill.sh"
+CURSOR_INSTALLER="$ROOT/scripts/install-cursor-skill.sh"
 PACKAGE_JSON="$ROOT/package.json"
 PACKAGE_LOCK_JSON="$ROOT/package-lock.json"
 CONFIG_JSON="$ROOT/ultraswarm.config.example.json"
@@ -173,7 +175,7 @@ fi
 
 # --- Check 7: Host skill frontmatter present ----------------------------------
 begin_check 7 "Claude Code and Codex skill frontmatter"
-for skill_file in "$SKILL_MD" "$CODEX_SKILL_MD"; do
+for skill_file in "$SKILL_MD" "$CODEX_SKILL_MD" "$CURSOR_SKILL_MD"; do
   skill_label="${skill_file#"$ROOT/"}"
   if [ ! -f "$skill_file" ]; then
     fail "$skill_label does not exist"
@@ -296,7 +298,7 @@ fi
 # --- Check 15: Host installation docs ----------------------------------------
 begin_check 15 "Host-specific installation docs"
 docs_bad=""
-for required in '~/.agents/skills' 'scripts/install-codex-skill.sh' '\$ultraswarm' '/ultraswarm'; do
+for required in '~/.agents/skills' 'scripts/install-codex-skill.sh' '\$ultraswarm' '/ultraswarm' '~/.cursor/skills' 'scripts/install-cursor-skill.sh'; do
   if ! grep -q -- "$required" "$ROOT/README.md"; then
     fail "README is missing host installation guidance: $required"
     docs_bad=yes
@@ -307,7 +309,37 @@ if grep -q '~/.codex/skills/ultraswarm' "$ROOT/README.md"; then
   docs_bad=yes
 fi
 if [ -z "$docs_bad" ]; then
-  pass "README distinguishes Codex and Claude Code installation and invocation"
+  pass "README distinguishes Codex, Claude Code, and Cursor installation and invocation"
+fi
+
+# --- Check 16: Cursor agent skill contract -----------------------------------
+begin_check 16 "Cursor agent skill contract"
+cursor_contract_bad=""
+for required in 'run --plan-file .ultraswarm-plan.json' '--approve-plan' 'merge <run-id> --approve' 'separate merge approval'; do
+  if ! grep -q -- "$required" "$CURSOR_SKILL_MD" 2>/dev/null; then
+    fail "Cursor agent skill is missing required contract text: $required"
+    cursor_contract_bad=yes
+  fi
+done
+if [ -z "$cursor_contract_bad" ]; then
+  pass "Cursor agent skill defines runner delegation and both approval gates"
+fi
+
+# --- Check 17: Cursor skill installer ------------------------------------------
+begin_check 17 "Cursor skill installer"
+if ! bash -n "$CURSOR_INSTALLER" 2>/dev/null; then
+  fail "scripts/install-cursor-skill.sh failed bash syntax check"
+else
+  install_tmp="$(mktemp -d)"
+  if CURSOR_SKILLS_DIR="$install_tmp/skills" bash "$CURSOR_INSTALLER" >/dev/null 2>&1 && \
+     [ -L "$install_tmp/skills/ultraswarm" ] && \
+     [ "$(readlink -f "$install_tmp/skills/ultraswarm")" = "$(readlink -f "$ROOT/hosts/agent/skills/ultraswarm")" ] && \
+     CURSOR_SKILLS_DIR="$install_tmp/skills" bash "$CURSOR_INSTALLER" >/dev/null 2>&1; then
+    pass "Cursor installer creates the ~/.cursor/skills symlink and is idempotent"
+  else
+    fail "Cursor installer smoke test failed"
+  fi
+  rm -rf "$install_tmp"
 fi
 
 # --- Summary ------------------------------------------------------------------

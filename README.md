@@ -1,9 +1,22 @@
 # ultraswarm
 
 Ultraswarm is a durable multi-worker coding orchestrator for Codex, Claude Code,
-Grok, and shell usage. One standalone Node runner owns decomposition, worker
+Cursor Agent, Grok, and shell usage. One standalone Node runner owns decomposition, worker
 routing, process supervision, isolated Git worktrees, adaptive review,
 transactional integration, approvals, recovery, and reporting.
+
+## What's New In v3.4
+
+- **`agent` worker** — the Cursor CLI (`agent -p --force`) as a headless shell worker for
+  isolated worktree execution. See [Cursor Agent Worker](#cursor-agent-worker).
+- **Cursor agent host skill** — install with `scripts/install-cursor-skill.sh` so Cursor
+  sessions can orchestrate via the standalone runner. See [Cursor Agent](#cursor-agent).
+
+## What's New In v3.3
+
+- **`small-harness` worker** — [SmallHarness](https://github.com/GetSmallAI/SmallHarness) as a
+  built-in worker with MCP integration and multi-backend support. See
+  [SmallHarness Worker](#smallharness-worker).
 
 ## What's New In v3.2
 
@@ -32,7 +45,7 @@ transactional integration, approvals, recovery, and reporting.
 - Integration branches that do not modify the checked-out branch
 - Separate plan and merge approvals
 - Crash/status/log/export commands and stale-base recovery
-- Generated Claude, Codex, and Grok skills from one provenance-locked contract
+- Generated Claude, Codex, Grok, and Cursor agent skills from one provenance-locked contract
 
 Node 22 or newer is required because ultraswarm uses the built-in `node:sqlite`
 API.
@@ -70,6 +83,29 @@ Install the plugin:
 
 Invoke `/ultraswarm`.
 
+### Cursor Agent
+
+```bash
+bash scripts/install-cursor-skill.sh
+```
+
+This creates:
+
+```text
+~/.cursor/skills/ultraswarm -> ~/projects/ultraswarm/hosts/agent/skills/ultraswarm
+```
+
+Restart Cursor and invoke the ultraswarm skill. The host prepares plans and
+delegates execution to `bin/ultraswarm.mjs`; it does not implement feature work
+directly.
+
+Install the Cursor CLI separately if you also want `agent` as a worker:
+
+```bash
+curl https://cursor.com/install -fsS | bash
+agent --version
+```
+
 ### Grok Or Shell
 
 Run `node ~/projects/ultraswarm/bin/ultraswarm.mjs ...`. The generated Grok host
@@ -80,7 +116,7 @@ contract is at `hosts/grok/skills/ultraswarm/SKILL.md`.
 - A Git repository
 - Node 22+
 - At least two authenticated worker CLIs from `codex`, `gemini`, `grok`, `agy`,
-  `droid`, `opencode`, `pi`, `pi-local`, and `small-harness`
+  `droid`, `opencode`, `pi`, `pi-local`, `small-harness`, and `agent`
 - An authenticated `claude` CLI for the default QA/decomposition brain, or
   `ANTHROPIC_API_KEY` with `ULTRASWARM_BRAIN=anthropic-api`
 
@@ -280,6 +316,35 @@ To route `simple` tasks through a local Ollama model instead, override in `ultra
 > { "workerEnvAllowlist": ["OPENAI_API_KEY", "OPENROUTER_API_KEY"] }
 > ```
 
+## Cursor Agent Worker
+
+The Cursor CLI (`agent`) runs headless tasks via `agent -p --force` in isolated worktrees.
+Ultraswarm uses the same `ShellWorkerAdapter` as every other worker — no custom interface.
+
+Install the CLI:
+
+```sh
+curl https://cursor.com/install -fsS | bash
+agent --version
+```
+
+Add `agent` to `enabled` to activate it. Built-in tier mapping: `simple` →
+`composer-2.5-fast`; `moderate` → `gpt-5.4`; `complex`/`expert` → Claude Sonnet 4.6 /
+Opus 4.8. Override models in `ultraswarm.config.json` via the standard `overrides` key.
+
+> **File writes:** ultraswarm always passes `--force` so the agent applies edits in
+> one-shot mode. Without `--force`, the CLI only proposes changes and the task fails
+> with `no_changes`.
+
+> **API key:** headless runs need `CURSOR_API_KEY`. Add it to `workerEnvAllowlist`:
+>
+> ```json
+> { "workerEnvAllowlist": ["CURSOR_API_KEY"] }
+> ```
+
+When Cursor is both host and worker, keep at least one other worker enabled so
+high-risk tasks can satisfy competition policy.
+
 ## Local / Private Models (Ollama)
 
 `pi` and `pi-local` are both backed by the [`pi`](https://github.com/earendil-works/pi)
@@ -353,6 +418,11 @@ node scripts/generate-host-skills.mjs --check
 
 Edit `hosts/host-contract.json` or `scripts/generate-host-skills.mjs`, then run
 `node scripts/generate-host-skills.mjs`. Do not hand-edit generated host skills.
+
+Host install scripts:
+
+- Codex: `bash scripts/install-codex-skill.sh`
+- Cursor: `bash scripts/install-cursor-skill.sh`
 
 A pre-commit hook (in `.githooks/`, auto-enabled by `npm install` via the `prepare` script)
 blocks commits that introduce host-skill drift — the generated `SKILL.md` files must stay in
