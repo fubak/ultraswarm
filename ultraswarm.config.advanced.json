@@ -9,9 +9,11 @@
     "intelligence.maxIntelligence (opt-in, default false): flips the ceiling QA slots from Opus to Fable — the always-on security adversarial lens and the expert-escalation review — and allows Fable for expert-tier decomposition. Fable costs ~30% more tokens (tokenizer) plus premium pricing, so it is OFF by default; turn it on only for the most safety-critical work.",
     "pi/pi-local both run the `pi` binary (earendil-works/pi). pi-local routes through an Ollama provider: register an `ollama` provider + the referenced models in ~/.pi/agent/models.json and `ollama pull` them. The qwen3-coder model IDs are defaults — override to match your locally pulled models.",
     "effortFlags (per CLI: codex/droid/pi) maps an effort level to the flag spliced into the {{EFFORT}} slot of that CLI's invocation. Tasks default to effort 'low'; the QA loop escalates effort before model tier.",
-    "aliases (opt-in): register your own CLI entries that extend a built-in. pi-qwen-coder below reuses the pi binary with a local Ollama model and a lean harness (--config), and is capped at moderate tier so it never receives expert work. Add the alias name to 'enabled' (or omit 'enabled') to activate it."
+    "aliases (opt-in): register your own CLI entries that extend a built-in. pi-qwen-coder below reuses the pi binary with a local Ollama model and a lean harness (--config), and is capped at moderate tier so it never receives expert work. Add the alias name to 'enabled' (or omit 'enabled') to activate it.",
+    "agent runs the Cursor CLI (`curl https://cursor.com/install -fsS | bash`). Headless worker runs need CURSOR_API_KEY in workerEnvAllowlist. The host skill installs to ~/.cursor/skills/ultraswarm via scripts/install-cursor-skill.sh."
   ],
-  "enabled": ["codex", "gemini", "grok", "agy", "droid", "opencode", "pi", "pi-local"],
+  "enabled": ["codex", "gemini", "grok", "agy", "droid", "opencode", "pi", "pi-local", "agent"],
+  "workerEnvAllowlist": ["CURSOR_API_KEY"],
   "intelligence": {
     "promptAnalysis": {
       "enabled": true,

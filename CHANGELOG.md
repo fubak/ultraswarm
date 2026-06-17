@@ -4,6 +4,17 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.4.0] - 2026-06-16
+
+### Added
+- **`agent` worker** — the Cursor CLI (`agent -p --force`) as a shell worker for
+  headless task execution in isolated worktrees. Built-in tier mapping: `simple` →
+  `composer-2.5-fast`; `moderate` → `gpt-5.4`; `complex`/`expert` → Claude
+  Sonnet 4.6 / Opus 4.8. Add `CURSOR_API_KEY` to `workerEnvAllowlist` for
+  headless auth. Custom model invocations are supported via `overrides`.
+- **Cursor agent host skill** — generated ultraswarm SKILL.md for Cursor sessions
+  to invoke the standalone runner as orchestrator (`scripts/install-cursor-skill.sh`).
+
 ## [3.3.0] - 2026-06-15
 
 ### Added
