@@ -4,6 +4,12 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- Official support for the xAI Grok plugin marketplace. Added `.grok-plugin/plugin.json` (alongside existing `.claude-plugin/plugin.json`) so the repo root serves as a clean remote plugin source. Updated README with dedicated Grok Build installation instructions. Submitted to https://github.com/xai-org/plugin-marketplace.
+- Expanded `.gitignore` to exclude session artifacts (`.sessions/`), analysis outputs, and debug command dumps.
+
 ## [3.4.0] - 2026-06-16
 
 ### Added

@@ -3,3 +3,10 @@ node_modules/
 .ultraswarm-plan.json
 .grok/
 *.log
+
+# Session artifacts, analysis, and debug outputs (not for source control)
+.sessions/
+analysis/
+command-output-full.txt
+*-output*.txt
+*.cmd-output*
