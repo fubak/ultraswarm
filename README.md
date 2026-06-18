@@ -83,6 +83,27 @@ Install the plugin:
 
 Invoke `/ultraswarm`.
 
+### Grok Build (xAI Plugin Marketplace)
+
+Ultraswarm is published in the official xAI Grok plugin marketplace.
+
+- Grok Build can proactively suggest the skill for complex multi-step coding tasks.
+- Install directly from the Grok marketplace / plugin browser (searches for "ultraswarm").
+- Invocation inside Grok: follow the skill (typically `ultraswarm` or `/ultraswarm`).
+
+The skill delegates to the standalone runner (do not re-implement orchestration inside the host).
+
+For direct/shell or non-Grok use:
+
+```bash
+node ~/projects/ultraswarm/bin/ultraswarm.mjs run ...
+# or the installed bin after `npm install -g` equivalent
+```
+
+See the generated Grok host contract: `hosts/grok/skills/ultraswarm/SKILL.md`.
+
+Plugin source + details: https://github.com/fubak/ultraswarm (manifest in `.grok-plugin/` + `.claude-plugin/`).
+
 ### Cursor Agent
 
 ```bash
