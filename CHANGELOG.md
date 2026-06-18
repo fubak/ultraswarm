@@ -4,17 +4,7 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
-
-### Added
-- Official support for the xAI Grok plugin marketplace. Added `.grok-plugin/plugin.json` (alongside existing `.claude-plugin/plugin.json`) so the repo root serves as a clean remote plugin source. Updated README with dedicated Grok Build installation instructions and a detailed "Maintaining the plugin after publication" subsection. Submitted via https://github.com/xai-org/plugin-marketplace/pull/52 (companion source PR #31 merged).
-- `scripts/validate.sh` extended with checks for `.grok-plugin/plugin.json` (JSON validity + version agreement) and a byte-identity check between the two plugin manifests (directly addresses Codex review feedback on packaging validation and manual sync risk).
-- `.gitignore` globs for artifacts narrowed (from overly broad `*-output*.txt` / `*.cmd-output*` to precise `command-output*.txt` patterns) per review feedback.
-- README duplication between Grok sections reduced; maintenance process now references the automated checks.
-
-Post-merge analysis performed using Codex (non-interactive exec + review path) and Claude CLI attempts, plus full `npm test` (321 passing), `scripts/validate.sh`, and manual inspection of packaging, docs, and hygiene. All agreed Codex recommendations implemented.
-
-## [3.4.0] - 2026-06-16
+## [3.4.0] - 2026-06-18
 
 ### Added
 - **`agent` worker** — the Cursor CLI (`agent -p --force`) as a shell worker for
@@ -24,6 +14,10 @@ Post-merge analysis performed using Codex (non-interactive exec + review path) a
   headless auth. Custom model invocations are supported via `overrides`.
 - **Cursor agent host skill** — generated ultraswarm SKILL.md for Cursor sessions
   to invoke the standalone runner as orchestrator (`scripts/install-cursor-skill.sh`).
+- Official support for the xAI Grok plugin marketplace. Added `.grok-plugin/plugin.json` (alongside existing `.claude-plugin/plugin.json`) so the repo root serves as a clean remote plugin source. Updated README with dedicated Grok Build installation instructions and a detailed "Maintaining the plugin after publication" subsection. Submitted via https://github.com/xai-org/plugin-marketplace/pull/52 (companion source PR #31 merged).
+- `scripts/validate.sh` extended with checks for `.grok-plugin/plugin.json` (JSON validity + version agreement) and a byte-identity check between the two plugin manifests (directly addresses Codex review feedback on packaging validation and manual sync risk).
+- `.gitignore` globs for artifacts narrowed (from overly broad `*-output*.txt` / `*.cmd-output*` to precise `command-output*.txt` patterns) per review feedback.
+- README duplication between Grok sections reduced; maintenance process now references the automated checks.
 
 ## [3.3.0] - 2026-06-15
 
