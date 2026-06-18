@@ -8,5 +8,5 @@ node_modules/
 .sessions/
 analysis/
 command-output-full.txt
-*-output*.txt
-*.cmd-output*
+command-output-*.txt
+*.cmd-output*.txt

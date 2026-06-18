@@ -11,6 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 PLUGIN_JSON="$ROOT/.claude-plugin/plugin.json"
+GROK_PLUGIN_JSON="$ROOT/.grok-plugin/plugin.json"
 MARKET_JSON="$ROOT/.claude-plugin/marketplace.json"
 SKILL_MD="$ROOT/skills/ultraswarm/SKILL.md"
 CODEX_SKILL_MD="$ROOT/hosts/codex/skills/ultraswarm/SKILL.md"
@@ -80,6 +81,11 @@ if jq empty "$PLUGIN_JSON" 2>/dev/null; then
 else
   fail "plugin.json is not valid JSON"
 fi
+if jq empty "$GROK_PLUGIN_JSON" 2>/dev/null; then
+  pass "grok-plugin/plugin.json is valid JSON"
+else
+  fail "grok-plugin/plugin.json is not valid JSON"
+fi
 if jq empty "$MARKET_JSON" 2>/dev/null; then
   pass "marketplace.json is valid JSON"
 else
@@ -124,29 +130,41 @@ read_version() { # <file> <jq-filter>
   echo "$v"
 }
 v_plugin="$(read_version "$PLUGIN_JSON" '.version')"
+v_grok="$(read_version "$GROK_PLUGIN_JSON" '.version')"
 v_meta="$(read_version "$MARKET_JSON" '.metadata.version')"
 v_entry="$(read_version "$MARKET_JSON" '.plugins[0].version')"
 v_package="$(read_version "$PACKAGE_JSON" '.version')"
 v_lock="$(read_version "$PACKAGE_LOCK_JSON" '.packages[""].version')"
 if [ "$JSON_MODE" -eq 0 ]; then
   echo "      plugin.json .version                  = $v_plugin"
+  echo "      grok-plugin/plugin.json .version      = $v_grok"
   echo "      marketplace.json .metadata.version    = $v_meta"
   echo "      marketplace.json .plugins[0].version  = $v_entry"
   echo "      package.json .version                 = $v_package"
   echo "      package-lock.json root .version       = $v_lock"
 fi
 v3_bad=""
-for v in "$v_plugin" "$v_meta" "$v_entry" "$v_package" "$v_lock"; do
+for v in "$v_plugin" "$v_grok" "$v_meta" "$v_entry" "$v_package" "$v_lock"; do
   case "$v" in
     "" | "null" | "<missing-file>" | "<jq-error>") v3_bad="yes" ;;
   esac
 done
 if [ -n "$v3_bad" ]; then
   fail "one or more versions are absent/null/unreadable"
-elif [ "$v_plugin" = "$v_meta" ] && [ "$v_meta" = "$v_entry" ] && [ "$v_entry" = "$v_package" ] && [ "$v_package" = "$v_lock" ]; then
-  pass "plugin and npm package versions match ($v_plugin)"
+elif [ "$v_plugin" = "$v_grok" ] && [ "$v_grok" = "$v_meta" ] && [ "$v_meta" = "$v_entry" ] && [ "$v_entry" = "$v_package" ] && [ "$v_package" = "$v_lock" ]; then
+  pass "plugin (grok+claude) and npm package versions match ($v_plugin)"
 else
   fail "version mismatch across plugin and npm manifests"
+fi
+
+# --- Check 3b: Grok and Claude manifests are identical (prevents drift) -------
+begin_check 3 "Grok and Claude plugin manifests are identical"
+if [ ! -f "$GROK_PLUGIN_JSON" ] || [ ! -f "$PLUGIN_JSON" ]; then
+  fail "one or both plugin manifests missing"
+elif cmp -s "$GROK_PLUGIN_JSON" "$PLUGIN_JSON"; then
+  pass "grok-plugin/plugin.json and claude-plugin/plugin.json are byte-identical"
+else
+  fail "grok-plugin/plugin.json and claude-plugin/plugin.json differ (run diff or sync them)"
 fi
 
 # --- Check 4: Generated host skills are current -------------------------------

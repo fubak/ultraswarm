@@ -102,7 +102,19 @@ node ~/projects/ultraswarm/bin/ultraswarm.mjs run ...
 
 See the generated Grok host contract: `hosts/grok/skills/ultraswarm/SKILL.md`.
 
-Plugin source + details: https://github.com/fubak/ultraswarm (manifest in `.grok-plugin/` + `.claude-plugin/`).
+Plugin source + details: https://github.com/fubak/ultraswarm (manifests in `.grok-plugin/` + `.claude-plugin/`).
+
+#### Maintaining the plugin after publication
+
+1. Bump version in `package.json`, `.grok-plugin/plugin.json`, and `.claude-plugin/plugin.json` (keep them identical).
+2. Update docs + CHANGELOG.
+3. `npm run validate` and `npm test` must pass.
+4. Push to main.
+5. Capture the new commit SHA (`git rev-parse HEAD`).
+6. In the plugin-marketplace repo, update the `sha` for ultraswarm, re-run `python3 scripts/generate-plugin-index.py`, then validate + open PR.
+7. `scripts/validate.sh` now also validates `.grok-plugin/plugin.json` (parse + version match) and enforces that the two manifests are byte-identical.
+
+This addresses review feedback on packaging validation and sync risk.
 
 ### Cursor Agent
 
@@ -127,10 +139,15 @@ curl https://cursor.com/install -fsS | bash
 agent --version
 ```
 
-### Grok Or Shell
+### Grok Or Shell (non-Grok hosts)
 
-Run `node ~/projects/ultraswarm/bin/ultraswarm.mjs ...`. The generated Grok host
-contract is at `hosts/grok/skills/ultraswarm/SKILL.md`.
+See the full [Grok Build (xAI Plugin Marketplace)](#grok-build-xai-plugin-marketplace) section (and the maintenance subsection) above. For direct execution outside Grok:
+
+```bash
+node ~/projects/ultraswarm/bin/ultraswarm.mjs ...
+```
+
+The generated Grok host contract is at `hosts/grok/skills/ultraswarm/SKILL.md`.
 
 ## Prerequisites
 

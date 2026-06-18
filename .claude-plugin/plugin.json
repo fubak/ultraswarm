@@ -13,7 +13,6 @@
     "orchestration",
     "multi-agent",
     "ai-agents",
-    "cli-orchestrator",
-    "git-worktrees"
+    "cli-orchestrator"
   ]
 }

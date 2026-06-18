@@ -7,8 +7,12 @@ All notable changes to ultraswarm are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
-- Official support for the xAI Grok plugin marketplace. Added `.grok-plugin/plugin.json` (alongside existing `.claude-plugin/plugin.json`) so the repo root serves as a clean remote plugin source. Updated README with dedicated Grok Build installation instructions. Submitted to https://github.com/xai-org/plugin-marketplace.
-- Expanded `.gitignore` to exclude session artifacts (`.sessions/`), analysis outputs, and debug command dumps.
+- Official support for the xAI Grok plugin marketplace. Added `.grok-plugin/plugin.json` (alongside existing `.claude-plugin/plugin.json`) so the repo root serves as a clean remote plugin source. Updated README with dedicated Grok Build installation instructions and a detailed "Maintaining the plugin after publication" subsection. Submitted via https://github.com/xai-org/plugin-marketplace/pull/52 (companion source PR #31 merged).
+- `scripts/validate.sh` extended with checks for `.grok-plugin/plugin.json` (JSON validity + version agreement) and a byte-identity check between the two plugin manifests (directly addresses Codex review feedback on packaging validation and manual sync risk).
+- `.gitignore` globs for artifacts narrowed (from overly broad `*-output*.txt` / `*.cmd-output*` to precise `command-output*.txt` patterns) per review feedback.
+- README duplication between Grok sections reduced; maintenance process now references the automated checks.
+
+Post-merge analysis performed using Codex (non-interactive exec + review path) and Claude CLI attempts, plus full `npm test` (321 passing), `scripts/validate.sh`, and manual inspection of packaging, docs, and hygiene. All agreed Codex recommendations implemented.
 
 ## [3.4.0] - 2026-06-16
 
