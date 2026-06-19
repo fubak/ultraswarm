@@ -4,6 +4,16 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.5.3] - 2026-06-19
+
+### Security
+- **Shell injection via plan `contract.commands`.** Contract commands run through `/bin/bash`
+  (`implement.mjs`) and, on the `--decompose` path, are LLM-generated from the task description.
+  Validation previously rejected only an embedded newline, so a command like `npm test; rm -rf ~`
+  passed and executed with the host's environment. `validatePlan` now also rejects shell
+  metacharacters (`; | & $ \` > < ( )`) in contract commands; plain `npm run x` / `vitest run src/`
+  style commands still pass. (audit #SE1)
+
 ## [3.5.2] - 2026-06-19
 
 ### Fixed
