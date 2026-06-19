@@ -89,6 +89,21 @@ test('run with a malformed --plan-file fails as USAGE with file context (#S1)', 
     (e) => e.code === 'USAGE' && /plan file/i.test(e.message))
 })
 
+// #ST1: a manual `resume` during an active run must NOT mark the live run completed_with_findings.
+// Liveness is judged on the durable orchestrator identity (pid + boot id), not transient worker pids.
+test('resume refuses to complete a run whose orchestrator is still alive (#ST1)', async () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'us-cli-'))
+  execSync('git init -q && git config user.email t@t && git config user.name t && git commit -q --allow-empty -m seed', { cwd: repo, shell: '/bin/bash' })
+  const store = openRepoStore(repo)
+  const base = execSync('git rev-parse HEAD', { cwd: repo, encoding: 'utf8' }).trim()
+  store.createRun({ id: 'r', repo, baseSha: base, plan: { tasks: [] }, policy: resolvePolicy(), waves: [] })
+  store.setOrchestrator('r', process.pid, store.bootId())   // THIS process is the live orchestrator
+  store.setRunStatus('r', 'running')
+  store.close()
+  await assert.rejects(() => commandMain(['resume', 'r'], repo), (e) => e.code === 'BLOCKED' && /alive/i.test(e.message))
+  assert.equal(openRepoStore(repo).getRun('r').status, 'running')   // not flipped to completed
+})
+
 // Task 6: routePlan must BLOCK when fewer healthy workers than the policy minimum exist, instead of
 // silently routing to dead workers.
 test('routePlan throws BLOCKED when healthy workers are below the minimum', () => {

@@ -178,6 +178,9 @@ async function runCommand(args, repo) {
     requireApproval(store, runId, 'plan', context.policy)
     integration = createIntegrationWorktree({ repo, runId, baseSha: context.baseSha, worktreeRoot })
     store.db.prepare('UPDATE runs SET integration_branch=?,status=?,updated_at=? WHERE id=?').run(integration.branch, 'running', new Date().toISOString(), runId)
+    // Stamp this process as the live orchestrator so a concurrent `resume` can tell a running
+    // orchestrator from a crashed one, instead of reaping a live run mid-flight (#ST1).
+    store.setOrchestrator(runId, process.pid, store.bootId())
     cfg = {
       ...context.config, repo, repoName: path.basename(repo), baseBranch: context.baseSha,
       integrationRepo: integration.worktree, worktreeRoot,
@@ -267,13 +270,22 @@ function resumeCommand(args, repo) {
     const run = store.getRun(runId)
     if (!run) throw new Error(`run not found: ${runId}`)
     const current = git(repo, ['rev-parse', 'HEAD'])
-    // (c) A run stuck in 'running' means the orchestrator process died mid-flight. Don't silently
-    // resume a half-run: fail orphaned attempts (running with a dead/absent pid) cleanly and move
-    // the run to a recoverable terminal status with accounting so it can't dead-end.
+    // (c) A run stuck in 'running' usually means the orchestrator died mid-flight. But it may still
+    // be ALIVE — judge liveness on the durable orchestrator identity (pid + boot id), NOT transient
+    // worker pids, so a manual resume during an active run can't reap a live run (#ST1). The boot id
+    // also defeats PID reuse across reboots: a stored pid from a prior boot is never "alive" (#ST2).
     if (run.status === 'running') {
-      const orphaned = store.getAttempts(runId).filter((item) => item.status === 'running' && (!item.pid || !isAlive(item.pid)))
+      const sameBoot = run.orchestrator_boot != null && run.orchestrator_boot === store.bootId()
+      if (sameBoot && run.orchestrator_pid && isAlive(run.orchestrator_pid)) {
+        throw Object.assign(new Error(`run ${runId} orchestrator (pid ${run.orchestrator_pid}) is still alive; cancel it first before resuming`), { code: 'BLOCKED' })
+      }
+      // Orchestrator confirmed dead (crashed) or from a prior boot (machine rebooted → every recorded
+      // pid is stale). On a different boot, all running attempts are definitely dead; on the same boot
+      // fall back to per-attempt pid liveness for the worker subprocesses.
+      const running = store.getAttempts(runId).filter((item) => item.status === 'running')
+      const orphaned = sameBoot ? running.filter((item) => !item.pid || !isAlive(item.pid)) : running
       for (const attempt of orphaned) store.finishAttempt(attempt.id, { status: 'failed', errorKind: 'orphaned' })
-      const alive = store.getAttempts(runId).filter((item) => item.status === 'running')
+      const alive = sameBoot ? store.getAttempts(runId).filter((item) => item.status === 'running') : []
       if (alive.length) throw Object.assign(new Error(`run ${runId} still has ${alive.length} live attempt(s); cancel it first`), { code: 'BLOCKED' })
       store.setRunStatus(runId, 'completed_with_findings', { recovered: true, failedAttempts: orphaned.length })
       throw Object.assign(new Error(`run ${runId} was stuck in 'running' (process died); marked ${orphaned.length} orphaned attempt(s) failed and the run completed_with_findings`), { code: 'BLOCKED' })

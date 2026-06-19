@@ -4,6 +4,22 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.5.7] - 2026-06-19
+
+### Fixed
+- **`resume` could complete a still-running run.** Recovery reaped attempts purely by worker pid, and
+  nothing recorded which process owned the run — so a `resume` invoked during an active run (e.g.
+  between waves, when no worker pid is alive) marked the live run `completed_with_findings` while the
+  real orchestrator kept going. The orchestrator's identity (pid + Linux boot id) is now persisted on
+  the run (`runs.orchestrator_pid`, `runs.orchestrator_boot`; schema v2 migration) and `resume` judges
+  liveness on it, refusing to reap a run whose orchestrator is alive. The boot id also defeats PID
+  reuse across reboots — a pid from a prior boot is never treated as live. (audit #ST1, #ST2)
+- **Terminal runs were mutable.** `setRunStatus` now refuses to move a `merged`/`cancelled` run to a
+  different status, so a straggler process or stray `resume` can't resurrect a finished run.
+  Same-status writes stay idempotent. (audit #ST4)
+- **`migrate()` bootstrap was not transactional.** Base-table creation + the version insert now run in
+  a single transaction, so a concurrent first-open can't observe a half-initialized schema. (audit #ST6)
+
 ## [3.5.6] - 2026-06-19
 
 ### Fixed
