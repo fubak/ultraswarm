@@ -5,13 +5,13 @@
   },
   "metadata": {
     "description": "Durable multi-worker coding orchestration with supervised CLIs, metric routing, transactional integration, recovery, and explicit approvals.",
-    "version": "3.5.4"
+    "version": "3.5.5"
   },
   "plugins": [
     {
       "name": "ultraswarm",
       "description": "Durable multi-worker coding orchestration with supervised CLIs, metric routing, transactional integration, recovery, and explicit approvals.",
-      "version": "3.5.4",
+      "version": "3.5.5",
       "author": {
         "name": "Fubak"
       },

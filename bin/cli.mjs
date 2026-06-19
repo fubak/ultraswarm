@@ -29,7 +29,11 @@ const git = (repo, args) => execFileSync('git', args, { cwd: repo, encoding: 'ut
 
 export function detectGates(repo, override) {
   const file = path.join(repo, 'package.json')
-  const scripts = fs.existsSync(file) ? (JSON.parse(fs.readFileSync(file, 'utf8')).scripts || {}) : {}
+  let scripts = {}
+  if (fs.existsSync(file)) {
+    try { scripts = JSON.parse(fs.readFileSync(file, 'utf8')).scripts || {} }
+    catch (e) { throw Object.assign(new Error(`invalid package.json in ${repo}: ${e.message}`), { code: 'USAGE' }) }
+  }
   // Operator override (CLI --gates / config.gates): an explicit list of npm script names to gate on,
   // so a worktree-unsafe gate (e.g. build) can be dropped or a non-conventional one added (#36). An
   // empty array explicitly disables all gates; omitting it (null/undefined) auto-detects build/test/lint.
@@ -71,7 +75,11 @@ function loadContext(repo, args = []) {
 async function loadPlan(args, context) {
   const planFile = value(args, '--plan-file')
   const task = value(args, '--decompose')
-  if (planFile) return JSON.parse(fs.readFileSync(path.resolve(planFile), 'utf8'))
+  if (planFile) {
+    const resolved = path.resolve(planFile)
+    try { return JSON.parse(fs.readFileSync(resolved, 'utf8')) }
+    catch (e) { throw Object.assign(new Error(`invalid plan file ${resolved}: ${e.message}`), { code: 'USAGE' }) }
+  }
   if (task) {
     const result = await decompose(brain(), task, context.repo, resolveBrainModel('opus', context.config).model, context.config)
     if (!result) throw new Error('decomposition failed')
