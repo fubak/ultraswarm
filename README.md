@@ -5,6 +5,20 @@ Cursor Agent, Grok, and shell usage. One standalone Node runner owns decompositi
 routing, process supervision, isolated Git worktrees, adaptive review,
 transactional integration, approvals, recovery, and reporting.
 
+## What's New In v3.5
+
+- **Functional preflight** — `preflight` runs a cached exec smoke test per CLI (write a file in an
+  isolated temp dir) and excludes workers that pass `--version` but can't actually run (dead auth,
+  no-op). Routing keys off the functional verdict. See [Prerequisites](#prerequisites).
+- **Human-readable output** — `preflight`, plan previews, `status`, and `doctor` render aligned
+  tables by default; add `--json` for the old machine output.
+- **Live progress + every-agent heartbeat** — runs stream per-agent dispatch lines, gate results,
+  and a periodic active/idle heartbeat to stderr so every worker stays visible.
+- **Tokens-saved summary** — the final report estimates the implementation tokens that ran on
+  external CLIs off your Claude context (an honest best-effort floor).
+- **Repo-local worktrees** — per-task worktrees default to `<repo>/.ultraswarm/worktrees` so Node
+  build gates resolve the repo's `node_modules`.
+
 ## What's New In v3.4
 
 - **`agent` worker** — the Cursor CLI (`agent -p --force`) as a headless shell worker for
@@ -106,8 +120,8 @@ Plugin source + details: https://github.com/fubak/ultraswarm (manifests in `.gro
 
 #### Maintaining the plugin after publication
 
-1. Bump version in `package.json`, `.grok-plugin/plugin.json`, and `.claude-plugin/plugin.json` (keep them identical).
-2. Update docs + CHANGELOG.
+1. Bump the version in every manifest so they agree (validate Check 3): `package.json`, `package-lock.json` (run `npm install --package-lock-only`), `.claude-plugin/plugin.json` and `.grok-plugin/plugin.json` (keep byte-identical — `cp` one to the other), and both `version` fields in `.claude-plugin/marketplace.json` (`metadata.version` + `plugins[0].version`).
+2. Update docs + CHANGELOG (move `[Unreleased]` to the new version + date).
 3. `npm run validate` and `npm test` must pass.
 4. Push to main.
 5. Capture the new commit SHA (`git rev-parse HEAD`).
@@ -161,9 +175,19 @@ The generated Grok host contract is at `hosts/grok/skills/ultraswarm/SKILL.md`.
 Check readiness:
 
 ```bash
+# Functionally verify each CLI (cached smoke test — proves a worker can actually write a file,
+# not just that `--version` succeeds). Workers shown UNUSABLE are excluded from routing.
+node ~/projects/ultraswarm/bin/ultraswarm.mjs preflight
+
+# Policy, gates, and worker capabilities (add --json for machine-readable output):
 node ~/projects/ultraswarm/bin/ultraswarm.mjs doctor
 node ~/projects/ultraswarm/bin/ultraswarm.mjs workers
 ```
+
+`preflight` is the recommended first step: a CLI can pass `--version` yet fail every real run
+(dead auth, no-op output). The smoke test catches that and routing skips non-functional workers
+automatically. Verdicts are cached in `.ultraswarm/functional-probe.json` (24h TTL, keyed by
+binary version); `preflight --smoke` forces a re-probe.
 
 ## Run
 
@@ -210,6 +234,16 @@ node ~/projects/ultraswarm/bin/ultraswarm.mjs run \
   --approve-plan
 ```
 
+While a run executes, it streams human-readable progress to stderr — wave headers, a per-agent
+dispatch line for every worker the moment it starts (`▶ task → cli@tier attempt N [pid …]`), gate
+results, review verdicts, and a periodic active/idle heartbeat (`⏱ active: … · idle: …`) so every
+worker's state stays visible. When it finishes it prints a summary: the per-task outcome, which
+worker landed each task, and a **tokens-saved** estimate — the implementation work that ran on
+external CLIs off your Claude context (a best-effort floor; see [token reporting](#state-and-safety)).
+
+Per-task worktrees are created under `<repo>/.ultraswarm/worktrees` (gitignored) so Node build
+gates resolve the repo's `node_modules`. Override with `--worktree-root <dir>`.
+
 The run finishes in `awaiting_merge`. Your checked-out branch has not changed.
 After reviewing status and logs, provide the separate merge approval:
 
@@ -230,6 +264,7 @@ node ~/projects/ultraswarm/bin/ultraswarm.mjs resume <run-id>
 
 | Command | Purpose |
 |---|---|
+| `preflight` | Functionally verify enabled CLIs (cached smoke test); `--smoke` forces a re-probe |
 | `run` | Preview or execute a plan |
 | `merge <id> --approve` | Approve and fast-forward integrated work |
 | `status [id]` | List runs or inspect durable state |
@@ -240,6 +275,11 @@ node ~/projects/ultraswarm/bin/ultraswarm.mjs resume <run-id>
 | `workers` | Show worker health and capabilities |
 | `explain-routing <task>` | Explain worker rankings |
 | `export <id>` | Export run provenance as JSON |
+
+`preflight`, `run` (plan preview), `status`, `doctor`, and `workers` print human-readable
+tables by default; add `--json` for machine-readable output. By default `run` functionally
+verifies the pool (cached smoke test) before assigning; pass `--smoke` to force a fresh probe or
+`--no-smoke` to fall back to a `--version`-only check.
 
 Legacy `--plan-file ... --yes` syntax remains as a v2 compatibility shim.
 `--yes` maps only to plan approval; it never approves the final merge.
@@ -443,7 +483,8 @@ in `ultraswarm.config.json` (see `ultraswarm.config.advanced.json`).
 - Worker environments use an allowlist rather than inheriting secrets.
 - Logs redact common credential assignments and rotate at the output limit.
 - Task contracts run commands and reject changes outside `allowed_paths`.
-- `.ultraswarm/` is ignored by Git and contains SQLite state plus worker logs.
+- `.ultraswarm/` is ignored by Git and contains SQLite state, worker logs, the functional-probe cache, and per-task worktrees.
+- Token reporting is best-effort: only some worker CLIs (e.g. codex) emit a parseable token count, so the run report's tokens-saved figure is an honest undercount (a floor), never a billing figure.
 - v2 JSONL journals remain readable files but cannot be resumed as v3 runs.
 
 ## Development

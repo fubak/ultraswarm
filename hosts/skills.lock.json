@@ -1,10 +1,10 @@
 {
   "contract": 1,
   "files": {
-    "skills/ultraswarm/SKILL.md": "6e40fb5d25c53a3cb3b334610244772b1d5ae163bcb162cc5ad0d63907026238",
-    "hosts/codex/skills/ultraswarm/SKILL.md": "74e40350ba2d1273207a63bf2d7fc2a2c522e703d2689b91510390282e677f48",
-    "hosts/grok/skills/ultraswarm/SKILL.md": "51888e5c3e107991b3ed212a214d0e8ff70f25aab1a565c62e218e4533b69cd7",
-    "hosts/small-harness/skills/ultraswarm/SKILL.md": "902378a124fb7bd2d8e2855541c246cbd073ff9a8927ae74ac17b13076428124",
-    "hosts/agent/skills/ultraswarm/SKILL.md": "e7e6bc0b1caca90aa1d93235ab9af833ec80b3d563169b2154f9b3aba6872a98"
+    "skills/ultraswarm/SKILL.md": "ebedce04f6b41c20c31379c0ca4a50f377e7f171c0b7f551280f55318eb5f413",
+    "hosts/codex/skills/ultraswarm/SKILL.md": "56badcd1f3785ef625a49f5db3aa11c47464558b1d47dd152a382483eb8937bc",
+    "hosts/grok/skills/ultraswarm/SKILL.md": "2b6e86ed36be1c97ee4a38b11f56b997b1cae65be0ffc461c79acd42a2fe1dd9",
+    "hosts/small-harness/skills/ultraswarm/SKILL.md": "460ab5210875e55f70a2dac49a9040bf247242bcf2b2a70f3151094ae2f8c5b4",
+    "hosts/agent/skills/ultraswarm/SKILL.md": "28f37c7b84e5308c2f2837a75092bdb4ae17d603d380383764b04c87275f89d0"
   }
 }

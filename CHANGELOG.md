@@ -4,6 +4,40 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.5.0] - 2026-06-19
+
+### Added
+- **Functional CLI verification (`preflight`).** A new `preflight` command runs a cached exec smoke
+  test for every enabled worker — it writes a trivial file in an isolated temp directory and verifies
+  the artifact actually appears (verify-by-artifact, not exit code). This catches the failure modes a
+  `--version` probe cannot: a CLI with dead auth that exits 0 without writing anything, or one that
+  errors on every real invocation. Verdicts are cached in `.ultraswarm/functional-probe.json` (24h
+  TTL, keyed by `name@<binary --version>`); `--smoke` forces a re-probe. `run` functionally verifies
+  the pool (cached) before assigning by default; `--no-smoke` falls back to a `--version`-only probe.
+  Non-functional workers are marked unhealthy, so existing routing and the `minimumHealthyWorkers`
+  gate exclude them with no routing-algorithm change. (`lib/workers/smoke.mjs`,
+  `WorkerManager.functionalProbes`.)
+- **Human-readable output by default.** `preflight`, the `run` plan preview, `status`, `doctor`, and
+  `workers` now print aligned tables (`lib/render.mjs`); `--json` preserves the previous machine
+  output verbatim.
+- **Live progress + every-agent heartbeat.** Runs stream per-agent dispatch lines
+  (`▶ task → cli@tier attempt N [pid …]`), wave headers, gate results (`✓build ✓test ✗lint`), review
+  verdicts, and a periodic active/idle heartbeat (`⏱ active: … · idle: …`) to stderr so every
+  worker's state stays visible throughout the run.
+- **Tokens-saved summary.** The final report adds a per-worker contribution line and a tokens-saved
+  estimate — the implementation work that ran on external CLIs off the Claude context. Framed as an
+  honest best-effort floor (most worker CLIs don't emit token counts; see
+  `docs/notes/cli-verification.md`).
+
+### Changed
+- **Per-task worktrees default to `<repo>/.ultraswarm/worktrees`** (was `~/worktrees`) so Node's
+  upward module resolution finds the repo's `node_modules` and build gates stop dying with
+  `<bin>: not found`. Override with `--worktree-root`.
+- Host skill workflow (single-sourced template in `scripts/generate-host-skills.mjs`) now leads with
+  `preflight`, instructs relaying live progress + the tokens-saved summary, and folds in operational
+  lessons (scope `allowed_paths` to coupled test files; commit the working tree before merge; prefer
+  disabling competition when the functional pool is thin). `preflight` added to the host contract.
+
 ## [3.4.0] - 2026-06-18
 
 ### Added
