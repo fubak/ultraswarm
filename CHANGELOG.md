@@ -4,6 +4,21 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.5.6] - 2026-06-19
+
+### Fixed
+- **Attempt token accounting was lossy.** `finishAttempt` never recorded `input_tokens` (the column
+  was always null) and read `outputTokens` only from `usage.totalTokens`, missing the common
+  `{input_tokens, output_tokens}` usage shape. Both token directions are now recorded. Worker USD
+  cost is passed through from the adapter unchanged — external worker CLIs run on the user's own
+  model/subscription, whose price ultraswarm cannot infer, so `costUsd` may be undefined for
+  token-only workers and `totalCost()` reflects brain cost plus adapter-reported worker cost. (#ST5)
+
+### Notes
+- Documented that the `maxCostUsd` gate is a read-then-act check: with N parallel workers it can be
+  overrun by up to one in-flight attempt per worker before costs land. Post-hoc accounting is now
+  accurate; an atomic reservation at `startAttempt` would be needed for a hard cap. (#ST3)
+
 ## [3.5.5] - 2026-06-19
 
 ### Fixed
