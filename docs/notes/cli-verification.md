@@ -3,6 +3,14 @@
 Date: 2026-06-07
 Purpose: source of truth for the `/ultraswarm` worker registry. Each entry records the exact verified one-shot invocation (prompt passed via `"$(cat .ultraswarm-prompt.txt)"`), smoke-test result, and quirks.
 
+> **Update (2026-06-19): the manual "Phase 0 write probe" is now automated.** The `preflight` command
+> (and `run` by default) executes the same verify-by-artifact smoke test in code — `lib/workers/smoke.mjs`
+> writes `ULTRASWARM_OK.txt` in an isolated temp dir and checks the file actually appears, exactly the
+> rule this note established ("verify worker output via artifacts, not exit codes"). Verdicts are cached
+> in `.ultraswarm/functional-probe.json` (24h TTL, keyed by `name@version`); non-functional workers are
+> excluded from routing automatically. The token-undercount caveat below still holds: the tokens-saved
+> figure in the run report is a floor because most CLIs emit no parseable token count.
+
 Global precondition: every invocation string below assumes the current working directory is the worker's git worktree, containing `.ultraswarm-prompt.txt`. `cd` there first (or use the per-CLI `--cwd`/`--dir` flag where noted).
 
 ## Summary
