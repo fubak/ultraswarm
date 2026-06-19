@@ -4,6 +4,18 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.5.2] - 2026-06-19
+
+### Fixed
+- **Re-entrant limiter deadlock could hang a whole run.** `lib/engine.mjs` used a single shared
+  concurrency limiter for both `pipeline()` (top-level wave tasks) and `parallel()` (the nested
+  competition / judge / adversarial-QA fan-out a high-risk or complex task spawns). An outer pipeline
+  task held its slot while awaiting an inner `parallel()` that could never acquire one from the same
+  pool — so once the running nesting tasks filled the pool the run hung forever. On hosts with
+  `cpus-2 ≤ 1` (≤3 cores, common in CI/containers) the pool size is 1, so the **first** high-risk or
+  complex task deadlocked immediately. `parallel()` now uses a separate pool from `pipeline()`; real
+  worker-subprocess concurrency stays capped at the leaf by the runner's `workerLimit`. (audit #O1)
+
 ## [3.5.1] - 2026-06-19
 
 ### Fixed
