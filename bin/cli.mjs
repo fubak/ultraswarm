@@ -14,6 +14,7 @@ import { createIntegrationWorktree, mergeApprovedRun, removeIntegrationWorktree 
 import { runSwarm } from '../lib/orchestrator/runner.mjs'
 import { buildReport, cleanup } from '../lib/orchestrator/report.mjs'
 import { decompose } from '../lib/orchestrator/decompose.mjs'
+import { renderPlanPreview, renderStatus, renderDoctor } from '../lib/render.mjs'
 import { AnthropicClient } from '../lib/llm/anthropic.mjs'
 import { ClaudeCliClient } from '../lib/llm/claude-cli.mjs'
 import { MockLlmClient } from '../lib/llm/mock-client.mjs'
@@ -62,11 +63,13 @@ async function loadPlan(args, context) {
   throw Object.assign(new Error('run requires --plan-file <json> or --decompose "<task>"'), { code: 'USAGE' })
 }
 
-export function routePlan(plan, context, manager, store = null) {
+export function routePlan(plan, context, manager, store = null, probesArg = null) {
   const check = validatePlan(plan, context.config)
   if (!check.valid) throw new Error(`invalid plan: ${check.errors.join('; ')}`)
   const enabled = context.config.enabled
-  const probes = manager.probes(enabled)
+  // Prefer functionally-verified probes (passed by the caller) so auth-dead/no-op workers are
+  // already marked unhealthy; fall back to a plain --version probe when none were supplied.
+  const probes = probesArg ?? manager.probes(enabled)
   const healthy = probes.filter((probe) => probe.healthy)
   if (healthy.length < context.policy.minimumHealthyWorkers) {
     throw Object.assign(new Error(`need ${context.policy.minimumHealthyWorkers} healthy workers; found ${healthy.length}`), { code: 'BLOCKED' })
@@ -82,11 +85,15 @@ export function routePlan(plan, context, manager, store = null) {
   return { tasks, probes, alternates, taskClasses: Object.fromEntries(tasks.map((task) => [task.id, task.routing.taskClass.primary])) }
 }
 
-function printPlan(tasks, gates) {
-  console.log(JSON.stringify({
-    tasks: tasks.map((task) => ({ id: task.id, worker: task.cli, tier: task.model_tier, risk: task.risk, wave_dependencies: task.dependencies, routing: task.routing.scores })),
-    gates,
-  }, null, 2))
+function printPlan(tasks, gates, probes, json) {
+  if (json) {
+    console.log(JSON.stringify({
+      tasks: tasks.map((task) => ({ id: task.id, worker: task.cli, tier: task.model_tier, risk: task.risk, wave_dependencies: task.dependencies, routing: task.routing.scores })),
+      gates,
+    }, null, 2))
+    return
+  }
+  console.log(renderPlanPreview(tasks, gates, probes))
 }
 
 // Remove per-task ultraswarm/* worktrees + branches, leaving the integration worktree/branch
@@ -120,24 +127,33 @@ async function runCommand(args, repo) {
   let store, cfg, integration, runId
   try {
     const plan = await loadPlan(args, context)
-    const routed = routePlan(plan, context, manager)
-    printPlan(routed.tasks, context.gates)
+    // Functionally verify CLIs before assigning. Default: cached smoke test (24h TTL); `--smoke`
+    // forces a refresh; `--no-smoke` falls back to a --version-only probe (faster, less safe).
+    const probes = has(args, '--no-smoke')
+      ? manager.probes(context.config.enabled)
+      : await manager.functionalProbes(context.config.enabled, { force: has(args, '--smoke') })
+    const routed = routePlan(plan, context, manager, null, probes)
+    printPlan(routed.tasks, context.gates, probes, has(args, '--json'))
     if (!has(args, '--approve-plan')) {
       console.error('Plan approval required. Re-run with --approve-plan.')
       return EXIT.APPROVAL
     }
     store = openRepoStore(repo)
     runId = value(args, '--run-id') ?? randomUUID()
+    // Default worktrees INSIDE the repo (.ultraswarm/worktrees, gitignored) so Node's upward module
+    // resolution finds the repo's node_modules — without this, build gates in node projects die with
+    // "<bin>: not found" because per-task worktrees have no node_modules of their own.
+    const worktreeRoot = value(args, '--worktree-root') ?? path.join(repo, '.ultraswarm', 'worktrees')
     const routedPlan = { ...plan, tasks: routed.tasks.map(({ routing, ...task }) => task) }
     const waves = computeWaves(routedPlan.tasks)
     store.createRun({ id: runId, repo, baseSha: context.baseSha, plan: routedPlan, policy: context.policy, waves })
     store.approve(runId, 'plan')
     requireApproval(store, runId, 'plan', context.policy)
-    integration = createIntegrationWorktree({ repo, runId, baseSha: context.baseSha, worktreeRoot: value(args, '--worktree-root') ?? path.join(process.env.HOME, 'worktrees') })
+    integration = createIntegrationWorktree({ repo, runId, baseSha: context.baseSha, worktreeRoot })
     store.db.prepare('UPDATE runs SET integration_branch=?,status=?,updated_at=? WHERE id=?').run(integration.branch, 'running', new Date().toISOString(), runId)
     cfg = {
       ...context.config, repo, repoName: path.basename(repo), baseBranch: context.baseSha,
-      integrationRepo: integration.worktree, worktreeRoot: value(args, '--worktree-root') ?? path.join(process.env.HOME, 'worktrees'),
+      integrationRepo: integration.worktree, worktreeRoot,
       gates: context.gates, tasks: routedPlan.tasks, workerManager: manager, store, runId,
       registry: context.config.registry || {}, alternates: { ...routed.alternates, ...(context.config.alternates || {}) }, taskClasses: routed.taskClasses, policy: context.policy,
     }
@@ -182,7 +198,7 @@ function statusCommand(args, repo) {
   try {
     const runId = args[0]
     const output = runId ? { run: store.getRun(runId), tasks: store.getTasks(runId), attempts: store.getAttempts(runId) } : store.listRuns()
-    console.log(JSON.stringify(output, null, 2)); return EXIT.OK
+    console.log(has(args, '--json') ? JSON.stringify(output, null, 2) : renderStatus(output)); return EXIT.OK
   } finally { store.close() }
 }
 
@@ -265,14 +281,26 @@ function resumeCommand(args, repo) {
   } finally { store.close() }
 }
 
-function doctorCommand(repo, explain = false, task = {}) {
+function doctorCommand(args, repo, explain = false, task = {}) {
   const context = loadContext(repo), manager = new WorkerManager({ ...context.config, repo }), store = openRepoStore(repo)
   try {
     const probes = manager.probes(context.config.enabled)
-    const output = explain ? routeTask(task, { manager, store, enabled: context.config.enabled, probes }) : { policy: context.policy, gates: context.gates, workers: probes }
-    console.log(JSON.stringify(output, null, 2))
+    if (explain) { console.log(JSON.stringify(routeTask(task, { manager, store, enabled: context.config.enabled, probes }), null, 2)); return EXIT.OK }
+    console.log(has(args, '--json') ? JSON.stringify({ policy: context.policy, gates: context.gates, workers: probes }, null, 2) : renderDoctor(context.policy, context.gates, probes))
     return probes.filter((probe) => probe.healthy).length >= context.policy.minimumHealthyWorkers ? EXIT.OK : EXIT.BLOCKED
   } finally { store.close(); manager.close() }
+}
+
+// preflight FUNCTIONALLY verifies every enabled CLI (cached exec smoke test) and prints the roster,
+// so dead-auth/no-op/destructive workers are surfaced before they are ever routed a task. `--smoke`
+// forces a re-probe; `--json` emits the raw verdicts.
+async function preflightCommand(args, repo) {
+  const context = loadContext(repo), manager = new WorkerManager({ ...context.config, repo })
+  try {
+    const probes = await manager.functionalProbes(context.config.enabled, { force: has(args, '--smoke') })
+    console.log(has(args, '--json') ? JSON.stringify(probes, null, 2) : renderDoctor(context.policy, context.gates, probes))
+    return probes.filter((probe) => probe.healthy).length >= context.policy.minimumHealthyWorkers ? EXIT.OK : EXIT.BLOCKED
+  } finally { manager.close() }
 }
 
 function exportCommand(args, repo) {
@@ -301,8 +329,9 @@ export async function commandMain(argv = process.argv.slice(2), repo = process.c
   if (command === 'logs') return logsCommand(args, repo)
   if (command === 'cancel') return cancelCommand(args, repo)
   if (command === 'resume') return resumeCommand(args, repo)
-  if (command === 'doctor' || command === 'workers') return doctorCommand(repo)
-  if (command === 'explain-routing') return doctorCommand(repo, true, { description: args.join(' '), prompt: args.join(' '), files: [] })
+  if (command === 'doctor' || command === 'workers') return doctorCommand(args, repo)
+  if (command === 'preflight') return preflightCommand(args, repo)
+  if (command === 'explain-routing') return doctorCommand(args, repo, true, { description: args.join(' '), prompt: args.join(' '), files: [] })
   if (command === 'export') return exportCommand(args, repo)
   throw Object.assign(new Error(`unknown command: ${command}`), { code: 'USAGE' })
 }

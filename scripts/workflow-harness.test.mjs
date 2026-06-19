@@ -22,7 +22,7 @@ test('all host skills are thin runner adapters with matching provenance', () => 
 
 test('host contract exposes the complete durable command surface', () => {
   assert.deepEqual(contract.approvals, ['plan', 'merge'])
-  for (const command of ['run', 'merge', 'status', 'logs', 'cancel', 'resume', 'doctor', 'workers', 'explain-routing', 'export']) {
+  for (const command of ['run', 'merge', 'status', 'logs', 'cancel', 'resume', 'preflight', 'doctor', 'workers', 'explain-routing', 'export']) {
     assert.ok(contract.commands.includes(command), `missing ${command}`)
   }
 })
