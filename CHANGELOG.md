@@ -4,6 +4,20 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.5.5] - 2026-06-19
+
+### Fixed
+- **Anthropic brain schema calls bypassed the validate-and-retry loop.** `AnthropicClient.complete()`
+  ran a bare `JSON.parse` on a schema call; a truncated/fenced/non-JSON response threw, and because
+  that throw happens *outside* `completeWithSchema`'s try it escaped the retry loop entirely (whereas
+  `claude-cli` returns raw text so the validator retries). `complete()` now extracts JSON defensively
+  (handling ```json fences) and returns the raw text on failure, so the validator drives the retry.
+  (audit #S2)
+- **CLI JSON boundaries failed cryptically.** A malformed `--plan-file` threw a raw `SyntaxError`
+  reported as `RUNTIME` (exit 1) instead of `USAGE` (exit 2) with file context — unlike the sibling
+  `--decompose` path; and `detectGates` parsed the repo `package.json` with no context. Both now throw
+  a contextful `USAGE` error naming the offending file. (audit #S1, #S4)
+
 ## [3.5.4] - 2026-06-19
 
 ### Fixed

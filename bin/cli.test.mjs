@@ -71,6 +71,24 @@ test('detectGates rejects an override naming a script that does not exist', () =
   assert.throws(() => detectGates(repo, ['buld']), /buld/)
 })
 
+// #S4: a malformed repo package.json must fail loudly with file context + a USAGE code, not a raw
+// SyntaxError with no hint of which file.
+test('detectGates throws a contextful USAGE error on a malformed package.json (#S4)', () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'us-cli-'))
+  fs.writeFileSync(path.join(repo, 'package.json'), '{ not json')
+  assert.throws(() => detectGates(repo), (e) => e.code === 'USAGE' && /package\.json/.test(e.message))
+})
+
+// #S1: a malformed --plan-file must fail as USAGE (exit 2) with file context, like the sibling
+// --decompose path — not a raw SyntaxError reported as RUNTIME (exit 1).
+test('run with a malformed --plan-file fails as USAGE with file context (#S1)', async () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'us-cli-'))
+  execSync('git init -q && git config user.email t@t && git config user.name t && git commit -q --allow-empty -m seed', { cwd: repo, shell: '/bin/bash' })
+  const bad = path.join(repo, 'bad-plan.json'); fs.writeFileSync(bad, '{ not json')
+  await assert.rejects(() => commandMain(['run', '--plan-file', bad, '--approve-plan'], repo),
+    (e) => e.code === 'USAGE' && /plan file/i.test(e.message))
+})
+
 // Task 6: routePlan must BLOCK when fewer healthy workers than the policy minimum exist, instead of
 // silently routing to dead workers.
 test('routePlan throws BLOCKED when healthy workers are below the minimum', () => {
