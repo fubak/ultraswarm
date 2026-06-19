@@ -4,6 +4,16 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.5.8] - 2026-06-19
+
+### Fixed
+- **Post-run cleanup force-deleted every `ultraswarm/*` branch.** `cleanup()` ran `git branch -D` on
+  all `ultraswarm/*` branches in the repo, so a concurrent or paused other run's per-task and
+  integration branches were destroyed (losing unmerged work). Cleanup is now scoped to the current
+  run: its integration branch (`ultraswarm/run-<runId>`) plus per-task branches matched by this run's
+  task ids (`ultraswarm/<taskId>-*`, robust to alternate/multi-dash worker names). Another run's
+  branches are left intact. (audit #SE2)
+
 ## [3.5.7] - 2026-06-19
 
 ### Fixed
