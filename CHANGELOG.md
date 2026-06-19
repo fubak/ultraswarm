@@ -4,6 +4,22 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.5.10] - 2026-06-19
+
+### Fixed
+- **Alias workers were silently barred from high-risk competition.** A high-risk task pinned to (or
+  whose alternate is) a user-defined alias worker tombstoned as `competition required but only N
+  usable worker(s)`, even though aliases route fine for routine tasks. Two spots gated on built-in
+  CLIs only: `cliUsable` (which selects competitors) and `validateCliName` (which guards the retry
+  loop) — both now also accept `cfg.aliases` (and legacy `registry`) names. Alias workers now compete
+  and can be retried. Verified live: a `claude` alias worker competed against `opencode` on a
+  high-risk task and merged. (Found during the audit-remediation live verification.)
+
+### Testing
+- Added high-risk competition coverage to the in-process e2e suite (real runner: competition →
+  adversarial QA → integration merge), unblocked by the alias fix, including an **O3** scenario where
+  a forced QA rejection (via a `QA_REJECT` mock-brain sentinel) drives the retry path end-to-end.
+
 ## [3.5.9] - 2026-06-19
 
 ### Fixed
