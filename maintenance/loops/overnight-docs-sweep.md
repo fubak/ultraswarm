@@ -10,7 +10,7 @@ Each night, review the codebase in full and make sure all documentation reflects
 
 ## Ultraswarm-Specific Scope and Rules
 
-Focus areas for ultraswarm (/home/fubak/projects/ultraswarm):
+Focus areas for ultraswarm (paths relative to the repo root):
 
 - README.md — all installation instructions (Claude Code plugin, Codex skill, Grok marketplace, Cursor agent, shell), "What's New" sections, command reference, policy, workers (including recent additions like `agent`, `small-harness`, `pi`, aliases, effort levels), development section.
 - Generated host skills — `skills/ultraswarm/SKILL.md` and `hosts/*/skills/ultraswarm/SKILL.md` are produced from `hosts/host-contract.json` by `scripts/generate-host-skills.mjs`. Never hand-edit the generated SKILL.md files. If the contract or generation changes, update relevant documentation describing the process.
