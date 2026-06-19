@@ -5,6 +5,25 @@ Cursor Agent, Grok, and shell usage. One standalone Node runner owns decompositi
 routing, process supervision, isolated Git worktrees, adaptive review,
 transactional integration, approvals, recovery, and reporting.
 
+## What's New In v3.5.1–v3.5.10
+
+Hardening from a full audit of the orchestrator (each fix shipped as its own patch release; see the
+[CHANGELOG](CHANGELOG.md) for per-version detail):
+
+- **Concurrency** — fixed a re-entrant limiter deadlock that could hang an entire run, and froze runs
+  deterministically on ≤3-core hosts (CI), whenever a high-risk task fanned out competition/QA work.
+- **Security** — plan `contract.commands` now reject shell metacharacters (no more `npm test; rm -rf ~`
+  reaching the shell); worker env passthrough narrowed from the whole `XDG_*` namespace to named vars.
+- **Integration** — a no-op squash records a clean skip instead of throwing and blocking the whole
+  wave; a failed per-task commit fails loud instead of reporting `ok`; post-run `cleanup` deletes only
+  the current run's branches.
+- **Recovery** — `resume` judges liveness on a persisted orchestrator identity (pid + boot id), so it
+  can't reap a still-running run or be fooled by PID reuse after a reboot; terminal runs are immutable.
+- **Brain** — Anthropic schema calls extract JSON defensively and fall back to raw text so the
+  validate-and-retry loop works; malformed `--plan-file` / `package.json` fail with a clear `USAGE` error.
+- **Alias workers in competition** — user-defined alias workers can now participate in (and be retried
+  within) high-risk competition; they previously tombstoned as "only N usable worker(s)".
+
 ## What's New In v3.5
 
 - **Functional preflight** — `preflight` runs a cached exec smoke test per CLI (write a file in an
