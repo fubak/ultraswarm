@@ -47,6 +47,30 @@ test('detectGates selects conventional package scripts', () => {
   assert.deepEqual(detectGates(repo), [{ name: 'test', cmd: 'npm run test' }, { name: 'lint', cmd: 'npm run lint' }])
 })
 
+// Fix 3 (#36): an operator override (CLI --gates / config.gates) selects WHICH scripts gate, so a
+// worktree-unsafe gate (e.g. build) can be dropped or a non-conventional script (typecheck) added.
+test('detectGates honors an explicit gate-name override, preserving order', () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'us-cli-'))
+  fs.writeFileSync(path.join(repo, 'package.json'), JSON.stringify({ scripts: { build: 'b', test: 't', lint: 'l', typecheck: 'tc' } }))
+  assert.deepEqual(detectGates(repo, ['test', 'typecheck']),
+    [{ name: 'test', cmd: 'npm run test' }, { name: 'typecheck', cmd: 'npm run typecheck' }])
+})
+
+// WHY: an empty override is an explicit "no gates" choice, distinct from omitting the override
+// (which auto-detects build/test/lint).
+test('detectGates treats an empty override as explicitly disabling gates', () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'us-cli-'))
+  fs.writeFileSync(path.join(repo, 'package.json'), JSON.stringify({ scripts: { build: 'b', test: 't' } }))
+  assert.deepEqual(detectGates(repo, []), [])
+})
+
+// WHY (Rule 12 — fail loud): a typo'd gate name must error, not silently run nothing.
+test('detectGates rejects an override naming a script that does not exist', () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'us-cli-'))
+  fs.writeFileSync(path.join(repo, 'package.json'), JSON.stringify({ scripts: { test: 't' } }))
+  assert.throws(() => detectGates(repo, ['buld']), /buld/)
+})
+
 // Task 6: routePlan must BLOCK when fewer healthy workers than the policy minimum exist, instead of
 // silently routing to dead workers.
 test('routePlan throws BLOCKED when healthy workers are below the minimum', () => {
