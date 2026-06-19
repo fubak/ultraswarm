@@ -4,6 +4,30 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.5.9] - 2026-06-19
+
+### Fixed
+- **QA-rejected competition winner retried blind.** When a high-risk task's competition winner passed
+  its gates but was rejected by adversarial QA, the retry seed was built only from gate-failed impls —
+  which were none — so the retry got no feedback about *why* it was rejected. The QA rejection reasons
+  are now forwarded into the retry seed. (audit #O3)
+- **Competition wins reported `final_model_tier: "external"`.** `runImplementation` hardcodes
+  `model_used: 'external'`, so a competition win recorded `'external'` instead of the task's resolved
+  tier. Now reports the real tier. (audit #O4)
+- **Swallowed `parallel()` task errors were invisible.** A rejected parallel task is still mapped to
+  `null` (callers use a quorum), but the error is now logged so a transport/auth failure in a
+  lens/judge agent isn't silent. (audit #S5)
+- **Worker env passthrough leaked the whole `XDG_*` namespace.** Narrowed to the specific XDG vars
+  workers need (`XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `XDG_DATA_HOME`, `XDG_RUNTIME_DIR`) so an
+  arbitrary `XDG_*` (e.g. a credential-dir override) no longer reaches third-party worker CLIs. (audit #SE4)
+- **Container mount path with `:` silently corrupted the volume spec.** A `cwd` containing `:` is now
+  rejected before launching the container; documented that container network isolation is opt-in via
+  `policy.network: 'deny'`. (audit #SE3)
+
+### Notes
+- Documented that the competition judge falls back to the first implementation when all judges fail —
+  intentional and still gated by adversarial QA, not a silent merit bypass. (audit #S6)
+
 ## [3.5.8] - 2026-06-19
 
 ### Fixed
