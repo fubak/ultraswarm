@@ -4,6 +4,32 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.5.1] - 2026-06-19
+
+### Fixed
+- **Worktree gates failed on pnpm workspaces (`<bin>: not found`).** A fresh git worktree checks out
+  tracked files only and has no `node_modules`; the v3.5.0 assumption that placing worktrees inside
+  the repo lets Node's upward module resolution reach the repo's `node_modules` holds for npm/yarn
+  hoisted layouts but is **false for pnpm**, which symlinks each package's deps from
+  `node_modules/.pnpm` (upward lookup never reaches them). The integration gate — which has no worker
+  to incidentally install deps — failed deterministically with e.g. `next: not found`, rolling back a
+  correct, review-approved task as a "post-merge gate regression" and cascading the whole dependency
+  chain to `blocked`. The runner now **installs dependencies in every worktree before gates run**,
+  inferred from the lockfile (`pnpm-lock.yaml` → `pnpm install --frozen-lockfile --prefer-offline`,
+  `package-lock.json` → `npm ci`, `yarn.lock` → `yarn install --immutable`); repos without a lockfile
+  are untouched. This makes per-task and integration gates run the same environment instead of
+  depending on a worker incidentally installing. A worktree install failure is surfaced loudly and
+  distinctly (per-task `deps_failed`; integration setup throws) so it is never mislabeled as a gate
+  regression or bad model output. (issue #36; `lib/orchestrator/worktree-deps.mjs`,
+  `createIntegrationWorktree`, `runImplementation`.)
+
+### Added
+- **Configurable gates.** Gate selection can now be overridden via `--gates <names>` (e.g.
+  `--gates test,lint` to drop a worktree-unsafe `build`) or a `"gates"` array in
+  `ultraswarm.config.json`; precedence is CLI > config > auto-detect, an empty list disables gates,
+  and unknown script names fail loudly. The same selection applies to the integration gate at merge
+  time, so `run` and `merge` stay consistent. Non-conventional scripts (e.g. `typecheck`) are allowed.
+
 ## [3.5.0] - 2026-06-19
 
 ### Added

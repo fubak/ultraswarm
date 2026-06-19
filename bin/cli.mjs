@@ -27,10 +27,22 @@ const value = (args, flag) => { const i = args.indexOf(flag); return i >= 0 ? ar
 const has = (args, flag) => args.includes(flag)
 const git = (repo, args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim()
 
-export function detectGates(repo) {
+export function detectGates(repo, override) {
   const file = path.join(repo, 'package.json')
-  if (!fs.existsSync(file)) return []
-  const scripts = JSON.parse(fs.readFileSync(file, 'utf8')).scripts || {}
+  const scripts = fs.existsSync(file) ? (JSON.parse(fs.readFileSync(file, 'utf8')).scripts || {}) : {}
+  // Operator override (CLI --gates / config.gates): an explicit list of npm script names to gate on,
+  // so a worktree-unsafe gate (e.g. build) can be dropped or a non-conventional one added (#36). An
+  // empty array explicitly disables all gates; omitting it (null/undefined) auto-detects build/test/lint.
+  if (override != null) {
+    if (!Array.isArray(override) || override.some((name) => typeof name !== 'string')) {
+      throw Object.assign(new Error('gates override must be an array of package.json script names'), { code: 'USAGE' })
+    }
+    const unknown = override.filter((name) => !scripts[name])
+    if (unknown.length) {
+      throw Object.assign(new Error(`gate override names not found in package.json scripts: ${unknown.join(', ')}; available: ${Object.keys(scripts).join(', ') || '(none)'}`), { code: 'USAGE' })
+    }
+    return override.map((name) => ({ name, cmd: `npm run ${name}` }))
+  }
   return ['build', 'test', 'lint'].filter((name) => scripts[name]).map((name) => ({ name, cmd: `npm run ${name}` }))
 }
 
@@ -41,14 +53,19 @@ function brain() {
   try { execFileSync('claude', ['--version'], { stdio: 'ignore' }); return new ClaudeCliClient() } catch { return new AnthropicClient() }
 }
 
-function loadContext(repo) {
+function loadContext(repo, args = []) {
   const config = loadConfig()
   const configCheck = validateConfig(config)
   if (!configCheck.valid) throw new Error(`invalid config: ${configCheck.errors.join('; ')}`)
   const policy = resolvePolicy(config)
   const policyCheck = validatePolicy(policy)
   if (!policyCheck.valid) throw new Error(`invalid policy: ${policyCheck.errors.join('; ')}`)
-  return { repo, config, policy, baseSha: git(repo, ['rev-parse', 'HEAD']), gates: detectGates(repo) }
+  // Gate selection precedence: CLI --gates (comma-separated) > config.gates > auto-detect. Threading
+  // it through every loadContext caller keeps `run` and `merge` consistent — both re-run the same
+  // gates, so an override that drops a gate must apply to both (#36).
+  const cliGates = value(args, '--gates')
+  const override = cliGates !== undefined ? cliGates.split(',').map((s) => s.trim()).filter(Boolean) : config.gates
+  return { repo, config, policy, baseSha: git(repo, ['rev-parse', 'HEAD']), gates: detectGates(repo, override) }
 }
 
 async function loadPlan(args, context) {
@@ -122,7 +139,7 @@ export function cleanupPerTaskWorktrees(repo, runId) {
 }
 
 async function runCommand(args, repo) {
-  const context = loadContext(repo)
+  const context = loadContext(repo, args)
   const manager = new WorkerManager({ ...context.config, repo })
   let store, cfg, integration, runId
   try {
@@ -140,9 +157,11 @@ async function runCommand(args, repo) {
     }
     store = openRepoStore(repo)
     runId = value(args, '--run-id') ?? randomUUID()
-    // Default worktrees INSIDE the repo (.ultraswarm/worktrees, gitignored) so Node's upward module
-    // resolution finds the repo's node_modules — without this, build gates in node projects die with
-    // "<bin>: not found" because per-task worktrees have no node_modules of their own.
+    // Default worktrees INSIDE the repo (.ultraswarm/worktrees, gitignored). A fresh worktree checks
+    // out tracked files only and has no node_modules of its own. We do NOT rely on Node's upward module
+    // resolution reaching the repo's node_modules: that holds for npm/yarn hoisted layouts but is false
+    // for pnpm, which symlinks each package's deps from node_modules/.pnpm (upward lookup never reaches
+    // them). Instead, deps are installed per-worktree before gates run — see installWorktreeDeps (#36).
     const worktreeRoot = value(args, '--worktree-root') ?? path.join(repo, '.ultraswarm', 'worktrees')
     const routedPlan = { ...plan, tasks: routed.tasks.map(({ routing, ...task }) => task) }
     const waves = computeWaves(routedPlan.tasks)
@@ -184,7 +203,7 @@ function mergeCommand(args, repo) {
   const runId = args[0]
   if (!runId) throw Object.assign(new Error('merge requires a run id'), { code: 'USAGE' })
   if (!has(args, '--approve')) throw Object.assign(new Error('merge approval required: add --approve'), { code: 'APPROVAL_REQUIRED' })
-  const context = loadContext(repo), store = openRepoStore(repo)
+  const context = loadContext(repo, args), store = openRepoStore(repo)
   try {
     store.approve(runId, 'merge')
     const result = mergeApprovedRun({ repo, runId, store, policy: context.policy, gates: context.gates })
@@ -282,7 +301,7 @@ function resumeCommand(args, repo) {
 }
 
 function doctorCommand(args, repo, explain = false, task = {}) {
-  const context = loadContext(repo), manager = new WorkerManager({ ...context.config, repo }), store = openRepoStore(repo)
+  const context = loadContext(repo, args), manager = new WorkerManager({ ...context.config, repo }), store = openRepoStore(repo)
   try {
     const probes = manager.probes(context.config.enabled)
     if (explain) { console.log(JSON.stringify(routeTask(task, { manager, store, enabled: context.config.enabled, probes }), null, 2)); return EXIT.OK }
@@ -295,7 +314,7 @@ function doctorCommand(args, repo, explain = false, task = {}) {
 // so dead-auth/no-op/destructive workers are surfaced before they are ever routed a task. `--smoke`
 // forces a re-probe; `--json` emits the raw verdicts.
 async function preflightCommand(args, repo) {
-  const context = loadContext(repo), manager = new WorkerManager({ ...context.config, repo })
+  const context = loadContext(repo, args), manager = new WorkerManager({ ...context.config, repo })
   try {
     const probes = await manager.functionalProbes(context.config.enabled, { force: has(args, '--smoke') })
     console.log(has(args, '--json') ? JSON.stringify(probes, null, 2) : renderDoctor(context.policy, context.gates, probes))

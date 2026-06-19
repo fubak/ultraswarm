@@ -16,8 +16,9 @@ transactional integration, approvals, recovery, and reporting.
   and a periodic active/idle heartbeat to stderr so every worker stays visible.
 - **Tokens-saved summary** — the final report estimates the implementation tokens that ran on
   external CLIs off your Claude context (an honest best-effort floor).
-- **Repo-local worktrees** — per-task worktrees default to `<repo>/.ultraswarm/worktrees` so Node
-  build gates resolve the repo's `node_modules`.
+- **Repo-local worktrees with deps installed** — per-task and integration worktrees default to
+  `<repo>/.ultraswarm/worktrees` and have dependencies installed before gates run (detected from the
+  lockfile: pnpm/npm/yarn), so build/test gates resolve `node_modules` even on pnpm workspaces.
 
 ## What's New In v3.4
 
@@ -241,8 +242,18 @@ worker's state stays visible. When it finishes it prints a summary: the per-task
 worker landed each task, and a **tokens-saved** estimate — the implementation work that ran on
 external CLIs off your Claude context (a best-effort floor; see [token reporting](#state-and-safety)).
 
-Per-task worktrees are created under `<repo>/.ultraswarm/worktrees` (gitignored) so Node build
-gates resolve the repo's `node_modules`. Override with `--worktree-root <dir>`.
+Per-task and integration worktrees are created under `<repo>/.ultraswarm/worktrees` (gitignored).
+Because a fresh worktree checks out tracked files only (no `node_modules`), the runner installs
+dependencies in each worktree before gates run — inferred from the lockfile (`pnpm-lock.yaml` →
+`pnpm install --frozen-lockfile`, `package-lock.json` → `npm ci`, `yarn.lock` → `yarn install
+--immutable`); repos without a lockfile are left untouched. This is what makes gates resolve
+`node_modules` on pnpm workspaces, where upward module resolution from a sibling worktree does not
+reach the symlinked deps. Override the worktree location with `--worktree-root <dir>`.
+
+Gates are auto-detected from your `package.json` scripts (`build`, `test`, `lint`). Override which
+scripts gate with `--gates <names>` (e.g. `--gates test,lint` to drop a worktree-unsafe `build`) or a
+`"gates"` array in `ultraswarm.config.json`; an empty list disables gates. The same selection applies
+to the integration gate at merge time, so `run` and `merge` stay consistent.
 
 The run finishes in `awaiting_merge`. Your checked-out branch has not changed.
 After reviewing status and logs, provide the separate merge approval:
