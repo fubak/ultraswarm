@@ -4,6 +4,19 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.5.4] - 2026-06-19
+
+### Fixed
+- **No-op squash blocked the whole run.** If an approved branch had no net diff vs the integration
+  branch (e.g. a sibling task in the same wave already landed the identical change), `git merge
+  --squash` staged nothing but the unguarded `git commit` threw — and `runner` marked the entire wave
+  *and every later wave* `blocked`. `mergeWave` now detects an empty index (`git diff --cached
+  --quiet`) and records a clean `no net change` skip instead of throwing. (audit #O2)
+- **Per-task success-commit failures were masked.** The per-task commit was wrapped in an empty
+  `catch`, so a genuinely failed commit (hooks/identity) was swallowed and the task still reported
+  `ok` — leaving an empty branch that merged nothing while the task was reported integrated. A failed
+  commit now returns a loud `cli_failed` with a `commit_failed` attempt record. (audit #S3)
+
 ## [3.5.3] - 2026-06-19
 
 ### Security
