@@ -5,6 +5,21 @@ Cursor Agent, Grok, and shell usage. One standalone Node runner owns decompositi
 routing, process supervision, isolated Git worktrees, adaptive review,
 transactional integration, approvals, recovery, and reporting.
 
+## What's New In v3.5.11
+
+Readability + accuracy pass on the two human-facing output surfaces (see the
+[CHANGELOG](CHANGELOG.md) for detail):
+
+- **Accurate run-end report** — reports "integrated" (not "merged") while a run awaits merge approval,
+  with a staging line making clear nothing lands on your branch until you approve; the headline counts
+  every task (including post-merge regressions) so the numbers reconcile.
+- **Honest token offload** — the offload headline no longer leads with a misleading `≈ N`/`≈ 0`; it
+  shows the exact figure on full coverage, an explicit floor (`x of y tasks reported`) on partial, and
+  "not measurable here" when no worker reports usage. Retried-but-integrated tasks are named.
+- **Visible competition retries** — when a high-risk competition winner is rejected by adversarial QA,
+  the live stream now logs the judged winner and `✗ … rejected by QA — retrying` instead of silently
+  jumping to the next attempt.
+
 ## What's New In v3.5.1–v3.5.10
 
 Hardening from a full audit of the orchestrator (each fix shipped as its own patch release; see the
