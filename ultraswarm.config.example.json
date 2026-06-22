@@ -3,7 +3,7 @@
   "workerEnvAllowlist": ["CURSOR_API_KEY"],
   "overrides": {
     "codex": { "timeoutMs": 900000 },
-    "opencode": { "invocation": "opencode run --agent build -m \"xai/grok-4.3\" \"$(cat .ultraswarm-prompt.txt)\"" },
+    "opencode": { "invocation": "opencode run --format json --agent build -m \"xai/grok-4.3\" \"$(cat .ultraswarm-prompt.txt)\"" },
     "pi-local": {
       "models": {
         "simple": { "model": "qwen3-coder:7b", "invocation": "pi -p --provider ollama --model qwen3-coder:7b \"$(cat .ultraswarm-prompt.txt)\"" }
