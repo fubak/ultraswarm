@@ -4,6 +4,22 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.5.14] - 2026-06-22
+
+### Added
+- **Real token-usage capture from codex and opencode.** 3.5.13 stopped fabricating a token number;
+  this captures the real one from each CLI's structured output. The default codex invocation now uses
+  `exec --json` and opencode uses `run --format json`; `adapters.parseUsage` parses the JSONL usage
+  events they emit — codex `{"type":"turn.completed","usage":{"input_tokens":N,"output_tokens":M}}`
+  and opencode `{"type":"step_finish",...,"part":{"tokens":{"input":N,"output":M},"cost":C}}` — summing
+  across turns/steps. The report's "Work offloaded" section now shows e.g. `Workers reported ≈ 238,656
+  tokens of usage` instead of "not reported" (verified live: codex ~66k in / ~1.9k out per task).
+  - A worker invoked WITHOUT the JSON flag (a custom override, or gemini/grok/agy/droid/pi which have
+    no usage parser yet) still runs fine and honestly reports "Token/cost usage: not reported by these
+    CLIs" — no fabrication (the free-text scrape removed in 3.5.13 stays gone).
+  - Updated `ultraswarm.config.example.json` and `ultraswarm.config.advanced.json` so the default
+    codex/opencode invocations include the JSON flags; a notes entry documents the requirement.
+
 ## [3.5.13] - 2026-06-22
 
 ### Fixed
