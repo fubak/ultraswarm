@@ -4,6 +4,24 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.5.13] - 2026-06-22
+
+### Fixed
+- **"Tokens saved" reported scraped noise, not real usage.** The token figure was scraped from worker
+  stdout with a regex (`/tokens?\s*used?[:\s]+(\d+)/`). External coding CLIs don't emit usage in that
+  shape, so it matched incidental numbers in their own output — e.g. "≈ 62 tokens" for a 5-attempt run
+  that actually consumed thousands. The number had false precision and badly understated the offload.
+  - Removed the free-text scrape: `adapters.parseUsage` no longer scans text, and `implement.mjs` drops
+    `parseTokens`. Token/cost now come ONLY from a worker's structured usage object; `cli_tokens` is
+    that structured total (0 when a CLI reports nothing), so the run's `externalTokens` reflects only
+    trustworthy usage.
+  - The run report's value section is reframed from "Tokens saved (estimate)" to **"Work offloaded"**,
+    reporting what is actually MEASURED — tasks, worker-attempt count, and total external wall-clock
+    (from the durable store's `duration_ms`). A token figure appears ONLY when a worker reported one
+    (with a floor caveat on partial coverage); otherwise the report says "Token/cost usage: not
+    reported by these CLIs" instead of inventing a misleading number (Rule 12). The headline is now a
+    qualitative value statement, never a fabricated count.
+
 ## [3.5.12] - 2026-06-22
 
 ### Fixed

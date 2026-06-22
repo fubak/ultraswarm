@@ -5,6 +5,17 @@ Cursor Agent, Grok, and shell usage. One standalone Node runner owns decompositi
 routing, process supervision, isolated Git worktrees, adaptive review,
 transactional integration, approvals, recovery, and reporting.
 
+## What's New In v3.5.13
+
+Honest run-report value section (see the [CHANGELOG](CHANGELOG.md)):
+
+- **No more scraped token noise** — the old "Tokens saved" number was regex-scraped from worker stdout
+  and matched incidental digits (e.g. "≈ 62 tokens" for a run that used thousands). The free-text
+  scrape is gone; token/cost now come only from a worker's structured usage, else nothing is claimed.
+- **"Work offloaded" reports what's measured** — tasks, worker-attempt count, and total external
+  wall-clock. A token figure shows only when a worker actually reported one; otherwise the report says
+  "Token/cost usage: not reported by these CLIs" rather than inventing a misleading count.
+
 ## What's New In v3.5.12
 
 Live-stream readability follow-up to v3.5.11 (see the [CHANGELOG](CHANGELOG.md)):
