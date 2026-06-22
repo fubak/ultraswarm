@@ -4,6 +4,27 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.5.11] - 2026-06-22
+
+### Fixed
+- **Run-end report described integrated work as "merged".** The report printed while a run is still
+  `awaiting_merge` said tasks were "merged", contradicting both the `status` command (which says
+  `integrated`) and the report's own "Approve merge with …" footer. It now uses "integrated", adds a
+  one-line staging clarification (nothing lands on the checked-out branch until merge approval), and
+  the headline counts every task — including a "not integrated" category for a winner that passed
+  review but regressed at the integration gate — so the numbers always reconcile against the total. (#48)
+- **Token-offload headline misled when usage coverage was partial or zero.** A bare `≈ N tokens`
+  badly understated the offload when most CLIs report no usage, and `≈ 0 tokens` was actively
+  misleading. The headline now has three honest framings: full coverage → the figure; partial → an
+  explicit floor with the `x of y tasks reported` ratio; none → "offload isn't measurable here". The
+  coverage unit is now "tasks" (matching the per-task counter), and a retried-but-integrated task is
+  surfaced ("Retried before passing: …") instead of leaving a bare attempt count unexplained. (#48)
+- **Competition QA rejections retried silently in the live stream.** A high-risk task whose judged
+  winner passed its gates but was rejected by adversarial QA jumped straight to "attempt 2" with no
+  reason. The stream now logs the judged winner, the `✗ … rejected by QA (N issues) — retrying` line,
+  and an all-competitors-failed-gates case; the high-risk attempt loop's rejection/escalation lines
+  now carry the `✗`/`↑` glyphs to match the routine path. (#49)
+
 ## [3.5.10] - 2026-06-19
 
 ### Fixed
