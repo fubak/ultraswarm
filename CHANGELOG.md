@@ -4,6 +4,15 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.5.17] - 2026-06-22
+
+### Fixed
+- **Per-task table was the last markdown table in the report.** With the per-CLI table fixed in 3.5.16,
+  the per-task list (`| task | worker | status | attempts |` + `|---|`) was still markdown and looked
+  broken in a raw terminal. It now uses the same aligned `table()` renderer — `─` separator, status
+  left-aligned (variable-length text), attempts right-aligned. **Every table in the run report is now
+  fixed-width terminal-formatted, no markdown.**
+
 ## [3.5.16] - 2026-06-22
 
 ### Fixed
