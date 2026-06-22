@@ -5,6 +5,16 @@ Cursor Agent, Grok, and shell usage. One standalone Node runner owns decompositi
 routing, process supervision, isolated Git worktrees, adaptive review,
 transactional integration, approvals, recovery, and reporting.
 
+## What's New In v3.5.15
+
+Per-CLI token breakdown (see the [CHANGELOG](CHANGELOG.md)):
+
+- **"Work offloaded" now breaks usage down by CLI** — a table of `landed` (tokens that produced
+  integrated work) vs `spent` (all attempts, incl. rejected retries and competition losers) vs
+  `overhead`, with a reconciling total. You can see at a glance which worker burned tokens and how
+  much went to retries/competition (e.g. `Workers used ≈ 383,578 tokens — ≈ 274,485 landed,
+  ≈ 109,093 on retries + competition`).
+
 ## What's New In v3.5.14
 
 Real token-usage capture (see the [CHANGELOG](CHANGELOG.md)):
