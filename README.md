@@ -5,6 +5,15 @@ Cursor Agent, Grok, and shell usage. One standalone Node runner owns decompositi
 routing, process supervision, isolated Git worktrees, adaptive review,
 transactional integration, approvals, recovery, and reporting.
 
+## What's New In v3.5.12
+
+Live-stream readability follow-up to v3.5.11 (see the [CHANGELOG](CHANGELOG.md)):
+
+- **No more git chatter in the stream** — `git worktree add` / `merge --squash` output is captured
+  instead of inherited, so a big swarm's progress lines aren't buried under "Preparing worktree …".
+- **Consistent glyphs everywhere** — routine-path escalation/rejection/blocked lines now carry the
+  same `↑`/`✗`/`⊘` glyphs as the high-risk competition path, so the whole stream scans uniformly.
+
 ## What's New In v3.5.11
 
 Readability + accuracy pass on the two human-facing output surfaces (see the

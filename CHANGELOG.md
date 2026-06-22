@@ -4,6 +4,22 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.5.12] - 2026-06-22
+
+### Fixed
+- **git plumbing flooded the live progress stream.** `git worktree add` ("Preparing worktree …",
+  one per task) and `git merge --squash` ("Automatic merge went well; stopped before committing …",
+  one per merged task) inherit the child process's stderr by default, so on a large swarm that chatter
+  buried the `▶`/`✔`/`⏱` progress lines. The three plumbing sites (per-task worktree-add in
+  `implement.mjs`, integration worktree-add in `integration.mjs`, wave merge-squash in `merge.mjs`)
+  now pass `stdio:['ignore','pipe','pipe']` to capture stderr (still surfaced on throw) instead of
+  inheriting it. Deliberate `inherit` exceptions (operator-facing gate output, resume-rebase) are left
+  as-is.
+- **Routine-path log lines lacked the glyph vocabulary.** The routine attempt loop now prefixes
+  escalation (`↑`), rejection (`✗`), blocked (`⊘`), missing-result (`✗`), and wave-merge-failure (`✗`)
+  lines with the same glyphs the high-risk path uses (3.5.11, #49) and that routine approval (`✔`)
+  already used — so a scan for `✗`/`↑`/`⊘` surfaces routine retries too, not just competition ones.
+
 ## [3.5.11] - 2026-06-22
 
 ### Fixed
