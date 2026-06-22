@@ -4,6 +4,19 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.5.15] - 2026-06-22
+
+### Added
+- **Per-CLI token breakdown in the run report.** "Work offloaded" now shows a table broken down by
+  worker: `landed` (tokens for the attempt that produced each task's integrated result) vs `spent`
+  (ALL of that CLI's attempts incl. rejected retries + competition losers), with `overhead = spent −
+  landed` and a reconciling Total row. The lead line reads e.g. `Workers used ≈ 383,578 tokens —
+  ≈ 274,485 on work that landed, ≈ 109,093 on retries + competition`, so the cost of the retry/
+  competition machinery is legible per CLI. The runner aggregates `landed` from each task's winning
+  result and `spent` from the durable store's per-attempt usage. A clean single-CLI run (landed ===
+  spent) omits the overhead clause and Total row; a run with no captured usage still says "not
+  reported".
+
 ## [3.5.14] - 2026-06-22
 
 ### Added
