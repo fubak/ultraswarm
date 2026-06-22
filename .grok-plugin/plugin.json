@@ -1,7 +1,7 @@
 {
   "name": "ultraswarm",
   "description": "Durable multi-worker coding orchestration with supervised CLIs, metric routing, transactional integration, recovery, and explicit approvals.",
-  "version": "3.5.17",
+  "version": "3.5.18",
   "author": {
     "name": "Fubak"
   },

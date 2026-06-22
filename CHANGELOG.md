@@ -4,6 +4,26 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.5.18] - 2026-06-22
+
+### Added
+- **Run report is plain terminal text by default; `--markdown` for PR pasting.** The report used
+  GitHub-markdown headers/emphasis (`#`/`##`/`**`/`_`) that show as literal characters in a raw
+  terminal. It now uses plain UPPERCASE section headers matching PLAN PREVIEW / WORKER ROSTER; pass
+  `--markdown` to restore GitHub-markdown for pasting into a PR or issue.
+- **ANSI color** (`lib/color.mjs`). The live stream colorizes by leading glyph at the single `log()`
+  chokepoint (green `✔`/`✓`, red `✗`, yellow `↑`/`⊘`, dim `⏱`) and the report verdict is green/red.
+  Auto-disabled when output is not a TTY (piped/CI/redirected output stays clean); honors the
+  `NO_COLOR` convention and a `--no-color` flag; `FORCE_COLOR=1` forces it on.
+- **Run wall-clock** in the report Summary ("Wall-clock: 3m 41s.") — the actual elapsed time, distinct
+  from the summed external-CLI compute already shown under Work offloaded.
+- **Short run-ids.** The "Approve merge with:" line prints the 8-char run-id prefix, and
+  `merge`/`status`/`logs`/`cancel`/`resume`/`export` resolve an unambiguous prefix to the full id.
+
+### Changed
+- De-duped the value-prop sentence that previously appeared in both the headline and the
+  Work-offloaded line.
+
 ## [3.5.17] - 2026-06-22
 
 ### Fixed
