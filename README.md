@@ -5,6 +5,11 @@ Cursor Agent, Grok, and shell usage. One standalone Node runner owns decompositi
 routing, process supervision, isolated Git worktrees, adaptive review,
 transactional integration, approvals, recovery, and reporting.
 
+## What's New In v3.5.17
+
+- **Every table in the run report is now a clean aligned terminal table** — the per-task list was the
+  last markdown table; it now matches the per-CLI / PLAN PREVIEW / WORKER ROSTER fixed-width style.
+
 ## What's New In v3.5.16
 
 - **Per-CLI token table now renders as a clean aligned terminal table** (the 3.5.15 version was a
