@@ -187,14 +187,18 @@ async function runCommand(args, repo) {
       gates: context.gates, tasks: routedPlan.tasks, workerManager: manager, store, runId,
       registry: context.config.registry || {}, alternates: { ...routed.alternates, ...(context.config.alternates || {}) }, taskClasses: routed.taskClasses, policy: context.policy,
     }
+    const t0 = Date.now()
     const result = await runSwarm(cfg, brain())
+    const runWallMs = Date.now() - t0
     for (const task of result.merged) store.updateTask(runId, task.task, task.merged ? 'integrated' : 'failed', { result: task })
     for (const id of result.failed) store.updateTask(runId, id, 'failed')
     for (const item of result.blocked) store.updateTask(runId, item.task, 'blocked', { lastError: item.reason })
     const integrated = result.merged.some((item) => item.merged)
     store.setRunStatus(runId, integrated ? 'awaiting_merge' : 'completed_with_findings', { report: result })
-    console.log(`\nRun: ${runId}\n${buildReport(result)}`)
-    if (integrated) console.log(`\nApprove merge with: ultraswarm merge ${runId} --approve`)
+    // --markdown keeps GitHub-markdown (for pasting into a PR); default is plain terminal formatting.
+    console.log(`\nRun: ${runId}\n${buildReport({ ...result, runWallMs, markdown: has(args, '--markdown') })}`)
+    // Short run-id (8-char prefix) in the merge instruction — easy to copy; merge resolves prefixes.
+    if (integrated) console.log(`\nApprove merge with: ultraswarm merge ${runId.slice(0, 8)} --approve`)
     return result.failed.length || result.blocked.length ? EXIT.BLOCKED : EXIT.OK
   } finally {
     // Worktree/branch leak fix (B2). Per-task worktrees are always disposable. The integration
@@ -210,12 +214,23 @@ async function runCommand(args, repo) {
   }
 }
 
+// Resolve a run id given on the CLI: an exact id, or an unambiguous prefix (so the short 8-char id
+// printed in the report's merge instruction works for merge/status/logs/cancel/resume/export).
+function resolveRunId(store, idOrPrefix) {
+  if (!idOrPrefix) return idOrPrefix
+  try { if (store.getRun(idOrPrefix)) return idOrPrefix } catch { /* fall through to prefix match */ }
+  const matches = store.listRuns().filter((r) => String(r.id).startsWith(idOrPrefix))
+  if (matches.length === 1) return matches[0].id
+  if (matches.length === 0) throw Object.assign(new Error(`no run matching "${idOrPrefix}"`), { code: 'USAGE' })
+  throw Object.assign(new Error(`run id prefix "${idOrPrefix}" is ambiguous (${matches.length} matches); use more characters`), { code: 'USAGE' })
+}
+
 function mergeCommand(args, repo) {
-  const runId = args[0]
-  if (!runId) throw Object.assign(new Error('merge requires a run id'), { code: 'USAGE' })
+  if (!args[0]) throw Object.assign(new Error('merge requires a run id'), { code: 'USAGE' })
   if (!has(args, '--approve')) throw Object.assign(new Error('merge approval required: add --approve'), { code: 'APPROVAL_REQUIRED' })
   const context = loadContext(repo, args), store = openRepoStore(repo)
   try {
+    const runId = resolveRunId(store, args[0])
     store.approve(runId, 'merge')
     const result = mergeApprovedRun({ repo, runId, store, policy: context.policy, gates: context.gates })
     console.log(JSON.stringify(result, null, 2))
@@ -226,16 +241,17 @@ function mergeCommand(args, repo) {
 function statusCommand(args, repo) {
   const store = openRepoStore(repo)
   try {
-    const runId = args[0]
+    const runId = args[0] ? resolveRunId(store, args[0]) : undefined
     const output = runId ? { run: store.getRun(runId), tasks: store.getTasks(runId), attempts: store.getAttempts(runId) } : store.listRuns()
     console.log(has(args, '--json') ? JSON.stringify(output, null, 2) : renderStatus(output)); return EXIT.OK
   } finally { store.close() }
 }
 
 function logsCommand(args, repo) {
-  const runId = args[0], store = openRepoStore(repo)
+  const store = openRepoStore(repo)
   try {
-    if (!runId) throw Object.assign(new Error('logs requires a run id'), { code: 'USAGE' })
+    if (!args[0]) throw Object.assign(new Error('logs requires a run id'), { code: 'USAGE' })
+    const runId = resolveRunId(store, args[0])
     const events = store.getEvents(runId, Number(value(args, '--after') ?? 0))
     console.log(has(args, '--json') ? JSON.stringify(events, null, 2) : events.map((event) => `${event.seq} ${event.created_at} ${event.type} ${event.task_id ?? ''} ${JSON.stringify(event.payload)}`).join('\n'))
     return EXIT.OK
@@ -245,9 +261,10 @@ function logsCommand(args, repo) {
 const isAlive = (pid) => { try { process.kill(pid, 0); return true } catch { return false } }
 
 async function cancelCommand(args, repo) {
-  const runId = args[0], store = openRepoStore(repo)
+  const store = openRepoStore(repo)
   try {
-    if (!runId) throw Object.assign(new Error('cancel requires a run id'), { code: 'USAGE' })
+    if (!args[0]) throw Object.assign(new Error('cancel requires a run id'), { code: 'USAGE' })
+    const runId = resolveRunId(store, args[0])
     const running = store.getAttempts(runId).filter((item) => item.status === 'running')
     // SIGTERM first for a graceful stop, then escalate to SIGKILL for any pid still alive after a
     // short grace so cancel can't leave orphaned worker trees behind.
@@ -265,8 +282,9 @@ async function cancelCommand(args, repo) {
 const revokeMergeApproval = (store, runId) => store.db.prepare('DELETE FROM approvals WHERE run_id=? AND gate=?').run(runId, 'merge')
 
 function resumeCommand(args, repo) {
-  const runId = args[0], store = openRepoStore(repo)
+  const store = openRepoStore(repo)
   try {
+    const runId = resolveRunId(store, args[0])
     const run = store.getRun(runId)
     if (!run) throw new Error(`run not found: ${runId}`)
     const current = git(repo, ['rev-parse', 'HEAD'])
@@ -343,9 +361,10 @@ async function preflightCommand(args, repo) {
 }
 
 function exportCommand(args, repo) {
-  const runId = args[0], store = openRepoStore(repo)
+  const store = openRepoStore(repo)
   try {
-    if (!runId) throw Object.assign(new Error('export requires a run id'), { code: 'USAGE' })
+    if (!args[0]) throw Object.assign(new Error('export requires a run id'), { code: 'USAGE' })
+    const runId = resolveRunId(store, args[0])
     const run = store.getRun(runId)
     if (!run) throw Object.assign(new Error(`run not found: ${runId}`), { code: 'USAGE' })
     const approvals = store.db.prepare('SELECT * FROM approvals WHERE run_id=? ORDER BY gate').all(runId)
@@ -355,6 +374,7 @@ function exportCommand(args, repo) {
 }
 
 export async function commandMain(argv = process.argv.slice(2), repo = process.cwd()) {
+  if (argv.includes('--no-color')) process.env.NO_COLOR = '1'   // disable ANSI before any output
   let args = [...argv], command = args.shift()
   if (!command || command.startsWith('--')) {
     console.error('Deprecated v2 flags detected; use `ultraswarm run ... --approve-plan`.')
