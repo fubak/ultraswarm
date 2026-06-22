@@ -5,6 +5,16 @@ Cursor Agent, Grok, and shell usage. One standalone Node runner owns decompositi
 routing, process supervision, isolated Git worktrees, adaptive review,
 transactional integration, approvals, recovery, and reporting.
 
+## What's New In v3.5.14
+
+Real token-usage capture (see the [CHANGELOG](CHANGELOG.md)):
+
+- **codex and opencode now report real usage.** Their default invocations use `exec --json` /
+  `run --format json`, and ultraswarm parses the structured JSONL usage events — so the report's
+  "Work offloaded" section shows the actual token count (e.g. `Workers reported ≈ 238,656 tokens`)
+  instead of "not reported". No more scraped guesswork (removed in 3.5.13), and no fabrication when a
+  CLI doesn't report — a custom invocation without the JSON flag honestly shows "not reported".
+
 ## What's New In v3.5.13
 
 Honest run-report value section (see the [CHANGELOG](CHANGELOG.md)):

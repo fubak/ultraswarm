@@ -10,7 +10,8 @@
     "pi/pi-local both run the `pi` binary (earendil-works/pi). pi-local routes through an Ollama provider: register an `ollama` provider + the referenced models in ~/.pi/agent/models.json and `ollama pull` them. The qwen3-coder model IDs are defaults — override to match your locally pulled models.",
     "effortFlags (per CLI: codex/droid/pi) maps an effort level to the flag spliced into the {{EFFORT}} slot of that CLI's invocation. Tasks default to effort 'low'; the QA loop escalates effort before model tier.",
     "aliases (opt-in): register your own CLI entries that extend a built-in. pi-qwen-coder below reuses the pi binary with a local Ollama model and a lean harness (--config), and is capped at moderate tier so it never receives expert work. Add the alias name to 'enabled' (or omit 'enabled') to activate it.",
-    "agent runs the Cursor CLI (`curl https://cursor.com/install -fsS | bash`). Headless worker runs need CURSOR_API_KEY in workerEnvAllowlist. The host skill installs to ~/.cursor/skills/ultraswarm via scripts/install-cursor-skill.sh."
+    "agent runs the Cursor CLI (`curl https://cursor.com/install -fsS | bash`). Headless worker runs need CURSOR_API_KEY in workerEnvAllowlist. The host skill installs to ~/.cursor/skills/ultraswarm via scripts/install-cursor-skill.sh.",
+    "Token-usage capture: the report's 'Work offloaded' section reads REAL token usage only from a worker's structured output. codex needs `exec --json` and opencode needs `run --format json` in the invocation (already set below) — a custom invocation without those flags will run fine but report 'Token/cost usage: not reported'. Other CLIs (gemini/grok/agy/droid/pi) have no usage parser yet."
   ],
   "enabled": ["codex", "gemini", "grok", "agy", "droid", "opencode", "pi", "pi-local", "agent"],
   "workerEnvAllowlist": ["CURSOR_API_KEY"],
@@ -52,19 +53,19 @@
       "models": {
         "simple": {
           "model": "gpt-5.4-mini",
-          "invocation": "codex exec -s workspace-write --skip-git-repo-check -m gpt-5.4-mini {{EFFORT}}\"$(cat .ultraswarm-prompt.txt)\" </dev/null"
+          "invocation": "codex exec --json -s workspace-write --skip-git-repo-check -m gpt-5.4-mini {{EFFORT}}\"$(cat .ultraswarm-prompt.txt)\" </dev/null"
         },
         "moderate": {
           "model": "gpt-5.4",
-          "invocation": "codex exec -s workspace-write --skip-git-repo-check -m gpt-5.4 {{EFFORT}}\"$(cat .ultraswarm-prompt.txt)\" </dev/null"
+          "invocation": "codex exec --json -s workspace-write --skip-git-repo-check -m gpt-5.4 {{EFFORT}}\"$(cat .ultraswarm-prompt.txt)\" </dev/null"
         },
         "complex": {
           "model": "gpt-5.5",
-          "invocation": "codex exec -s workspace-write --skip-git-repo-check -m gpt-5.5 {{EFFORT}}\"$(cat .ultraswarm-prompt.txt)\" </dev/null"
+          "invocation": "codex exec --json -s workspace-write --skip-git-repo-check -m gpt-5.5 {{EFFORT}}\"$(cat .ultraswarm-prompt.txt)\" </dev/null"
         },
         "expert": {
           "model": "gpt-5.5",
-          "invocation": "codex exec -s workspace-write --skip-git-repo-check -m gpt-5.5 {{EFFORT}}\"$(cat .ultraswarm-prompt.txt)\" </dev/null"
+          "invocation": "codex exec --json -s workspace-write --skip-git-repo-check -m gpt-5.5 {{EFFORT}}\"$(cat .ultraswarm-prompt.txt)\" </dev/null"
         }
       }
     },
@@ -72,19 +73,19 @@
       "models": {
         "simple": {
           "model": "xai/grok-build-0.1",
-          "invocation": "opencode run --agent build -m \"xai/grok-build-0.1\" \"$(cat .ultraswarm-prompt.txt)\""
+          "invocation": "opencode run --format json --agent build -m \"xai/grok-build-0.1\" \"$(cat .ultraswarm-prompt.txt)\""
         },
         "moderate": {
           "model": "xai/grok-4.3",
-          "invocation": "opencode run --agent build -m \"xai/grok-4.3\" \"$(cat .ultraswarm-prompt.txt)\""
+          "invocation": "opencode run --format json --agent build -m \"xai/grok-4.3\" \"$(cat .ultraswarm-prompt.txt)\""
         },
         "complex": {
           "model": "google/gemini-3.1-pro-preview",
-          "invocation": "opencode run --agent build -m \"google/gemini-3.1-pro-preview\" \"$(cat .ultraswarm-prompt.txt)\""
+          "invocation": "opencode run --format json --agent build -m \"google/gemini-3.1-pro-preview\" \"$(cat .ultraswarm-prompt.txt)\""
         },
         "expert": {
           "model": "xai/grok-4.20-0309-reasoning",
-          "invocation": "opencode run --agent build -m \"xai/grok-4.20-0309-reasoning\" \"$(cat .ultraswarm-prompt.txt)\""
+          "invocation": "opencode run --format json --agent build -m \"xai/grok-4.20-0309-reasoning\" \"$(cat .ultraswarm-prompt.txt)\""
         }
       }
     },
