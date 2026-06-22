@@ -5,6 +5,17 @@ Cursor Agent, Grok, and shell usage. One standalone Node runner owns decompositi
 routing, process supervision, isolated Git worktrees, adaptive review,
 transactional integration, approvals, recovery, and reporting.
 
+## What's New In v3.5.18
+
+Run-output polish:
+
+- **Plain terminal report by default** (no markdown `#`/`**`/`_` showing as literal chars); pass
+  `--markdown` to keep GitHub-markdown for pasting into a PR.
+- **Color** — the live stream and report verdict are color-coded (green pass / red fail / yellow
+  retry); auto-off when piped, honors `NO_COLOR` / `--no-color`.
+- **Run wall-clock** in the Summary, and **short 8-char run-ids** (merge/status/logs/… accept an
+  unambiguous prefix).
+
 ## What's New In v3.5.17
 
 - **Every table in the run report is now a clean aligned terminal table** — the per-task list was the
