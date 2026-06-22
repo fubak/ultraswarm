@@ -4,6 +4,16 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.5.16] - 2026-06-22
+
+### Fixed
+- **Per-CLI token table rendered as broken markdown in the terminal.** The 3.5.15 breakdown used a
+  GitHub-markdown table (`| … |` + `|---|--:|` separator + `**Total**`); in a raw terminal the pipes
+  don't align, the separator row is noise, and the bold shows literal asterisks. It now uses the same
+  fixed-width aligned `table()` renderer as PLAN PREVIEW / WORKER ROSTER — a `─` separator with
+  right-aligned numeric columns so digits line up. `render.mjs` `table()` gained an optional
+  per-column `align` array (default 'left', so existing callers are unchanged).
+
 ## [3.5.15] - 2026-06-22
 
 ### Added
