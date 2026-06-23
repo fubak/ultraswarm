@@ -8,8 +8,17 @@ Purpose: source of truth for the `/ultraswarm` worker registry. Each entry recor
 > writes `ULTRASWARM_OK.txt` in an isolated temp dir and checks the file actually appears, exactly the
 > rule this note established ("verify worker output via artifacts, not exit codes"). Verdicts are cached
 > in `.ultraswarm/functional-probe.json` (24h TTL, keyed by `name@version`); non-functional workers are
-> excluded from routing automatically. The token-undercount caveat below still holds: the tokens-saved
-> figure in the run report is a floor because most CLIs emit no parseable token count.
+> excluded from routing automatically.
+
+> **Update (2026-06-22): token capture is now STRUCTURED, not a scrape.** The free-text token scrape
+> (which matched incidental digits and undercounted by orders of magnitude) was removed in v3.5.13 and
+> replaced in v3.5.14 by parsing each CLI's structured usage events: codex `exec --json`
+> (`turn.completed.usage.{input_tokens,output_tokens}`) and opencode `run --format json`
+> (`step_finish.part.tokens.{input,output}`). The run report's "Work offloaded" section now shows real
+> per-CLI usage (landed vs spent vs retry/competition overhead). A CLI invoked without its JSON flag, or
+> one with no parser yet (gemini/grok/agy/droid/pi), runs fine and the report says "not reported" rather
+> than inventing a number. **The 2026-06-08 token observations at the bottom of this file are historical
+> (pre-structured-capture) — the "undercount/floor" framing no longer applies to codex/opencode.**
 
 Global precondition: every invocation string below assumes the current working directory is the worker's git worktree, containing `.ultraswarm-prompt.txt`. `cd` there first (or use the per-CLI `--cwd`/`--dir` flag where noted).
 

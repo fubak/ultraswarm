@@ -331,12 +331,20 @@ node ~/projects/ultraswarm/bin/ultraswarm.mjs run \
   --approve-plan
 ```
 
-While a run executes, it streams human-readable progress to stderr — wave headers, a per-agent
-dispatch line for every worker the moment it starts (`▶ task → cli@tier attempt N [pid …]`), gate
-results, review verdicts, and a periodic active/idle heartbeat (`⏱ active: … · idle: …`) so every
-worker's state stays visible. When it finishes it prints a summary: the per-task outcome, which
-worker landed each task, and a **tokens-saved** estimate — the implementation work that ran on
-external CLIs off your Claude context (a best-effort floor; see [token reporting](#state-and-safety)).
+While a run executes, it streams colour-coded progress to stderr — wave headers, a per-agent dispatch
+line for every worker the moment it starts (`▶ task → cli@tier attempt N [pid …]`), gate results
+(`✓`/`✗`), review verdicts (`✔` approved; `✗ … rejected by QA — retrying`), escalations (`↑`), and a
+periodic active/idle heartbeat (`⏱ active: … · idle: …`) so every worker's state stays visible. Colour
+auto-disables when output is not a TTY (piped/CI), honours the `NO_COLOR` convention, and is suppressed
+by `--no-color`.
+
+When it finishes it prints a run report (plain terminal text by default; pass `--markdown` to emit
+GitHub-markdown for pasting into a PR/issue): a per-task table showing which worker landed each task, a
+**Summary** with the run wall-clock, and a **Work offloaded** section — how many tasks/worker-attempts
+ran on external CLIs, their total compute time, and a per-CLI token breakdown (`landed` vs `spent` vs
+retry/competition `overhead`) read from each CLI's structured usage. The headline value: the
+implementation ran on external CLIs, off your Claude context; Claude only orchestrated and reviewed
+(see [token reporting](#state-and-safety)).
 
 Per-task and integration worktrees are created under `<repo>/.ultraswarm/worktrees` (gitignored).
 Because a fresh worktree checks out tracked files only (no `node_modules`), the runner installs
@@ -387,6 +395,12 @@ node ~/projects/ultraswarm/bin/ultraswarm.mjs resume <run-id>
 tables by default; add `--json` for machine-readable output. By default `run` functionally
 verifies the pool (cached smoke test) before assigning; pass `--smoke` to force a fresh probe or
 `--no-smoke` to fall back to a `--version`-only check.
+
+The run report renders as plain terminal text by default; pass `--markdown` to emit GitHub-markdown
+(for pasting into a PR or issue). Colour is enabled for interactive terminals and disabled when output
+is piped/redirected; turn it off explicitly with `--no-color` (or `NO_COLOR=1`). Any command that takes
+a run id also accepts an unambiguous **prefix** — e.g. the 8-character id printed in the report's
+`Approve merge with:` line — in place of the full id (`merge`/`status`/`logs`/`cancel`/`resume`/`export`).
 
 Legacy `--plan-file ... --yes` syntax remains as a v2 compatibility shim.
 `--yes` maps only to plan approval; it never approves the final merge.
@@ -591,7 +605,7 @@ in `ultraswarm.config.json` (see `ultraswarm.config.advanced.json`).
 - Logs redact common credential assignments and rotate at the output limit.
 - Task contracts run commands and reject changes outside `allowed_paths`.
 - `.ultraswarm/` is ignored by Git and contains SQLite state, worker logs, the functional-probe cache, and per-task worktrees.
-- Token reporting is best-effort: only some worker CLIs (e.g. codex) emit a parseable token count, so the run report's tokens-saved figure is an honest undercount (a floor), never a billing figure.
+- Token usage is read only from a worker's **structured** output (codex `exec --json`, opencode `run --format json`) — never a text scrape. A worker invoked without its JSON flag, or one with no usage parser yet (gemini/grok/agy/droid/pi), runs fine and the report honestly says "Token/cost usage: not reported", never a fabricated number. The figures are usage estimates, not a billing source of truth.
 - v2 JSONL journals remain readable files but cannot be resumed as v3 runs.
 
 ## Development
