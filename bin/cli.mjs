@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync, execSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { loadConfig, validateConfig } from '../lib/router.mjs'
+import { loadConfig, validateConfig, buildRegistry, resolveRoute, DEFAULT_REGISTRY } from '../lib/router.mjs'
 import { validatePlan } from '../lib/plan-schema.mjs'
 import { resolvePolicy, validatePolicy, enforceTaskPolicy, requireApproval } from '../lib/policy.mjs'
 import { openRepoStore } from '../lib/state/store.mjs'
@@ -14,7 +14,7 @@ import { createIntegrationWorktree, mergeApprovedRun, removeIntegrationWorktree 
 import { runSwarm } from '../lib/orchestrator/runner.mjs'
 import { buildReport, cleanup } from '../lib/orchestrator/report.mjs'
 import { decompose } from '../lib/orchestrator/decompose.mjs'
-import { renderPlanPreview, renderStatus, renderDoctor } from '../lib/render.mjs'
+import { renderPlanPreview, renderStatus, renderDoctor, renderMetrics, renderModels } from '../lib/render.mjs'
 import { AnthropicClient } from '../lib/llm/anthropic.mjs'
 import { ClaudeCliClient } from '../lib/llm/claude-cli.mjs'
 import { MockLlmClient } from '../lib/llm/mock-client.mjs'
@@ -72,7 +72,7 @@ function loadContext(repo, args = []) {
   return { repo, config, policy, baseSha: git(repo, ['rev-parse', 'HEAD']), gates: detectGates(repo, override) }
 }
 
-async function loadPlan(args, context) {
+async function loadPlan(args, context, metrics = []) {
   const planFile = value(args, '--plan-file')
   const task = value(args, '--decompose')
   if (planFile) {
@@ -81,7 +81,7 @@ async function loadPlan(args, context) {
     catch (e) { throw Object.assign(new Error(`invalid plan file ${resolved}: ${e.message}`), { code: 'USAGE' }) }
   }
   if (task) {
-    const result = await decompose(brain(), task, context.repo, resolveBrainModel('opus', context.config).model, context.config)
+    const result = await decompose(brain(), task, context.repo, resolveBrainModel('opus', context.config).model, context.config, metrics)
     if (!result) throw new Error('decomposition failed')
     return result
   }
@@ -151,7 +151,10 @@ async function runCommand(args, repo) {
   const manager = new WorkerManager({ ...context.config, repo })
   let store, cfg, integration, runId
   try {
-    const plan = await loadPlan(args, context)
+    // Opened before loadPlan so the --decompose branch can feed measured worker track record
+    // (store.getMetrics()) into the roster the brain sees (Feature E).
+    store = openRepoStore(repo)
+    const plan = await loadPlan(args, context, store.getMetrics())
     // Functionally verify CLIs before assigning. Default: cached smoke test (24h TTL); `--smoke`
     // forces a refresh; `--no-smoke` falls back to a --version-only probe (faster, less safe).
     const probes = has(args, '--no-smoke')
@@ -163,7 +166,6 @@ async function runCommand(args, repo) {
       console.error('Plan approval required. Re-run with --approve-plan.')
       return EXIT.APPROVAL
     }
-    store = openRepoStore(repo)
     runId = value(args, '--run-id') ?? randomUUID()
     // Default worktrees INSIDE the repo (.ultraswarm/worktrees, gitignored). A fresh worktree checks
     // out tracked files only and has no node_modules of its own. We do NOT rely on Node's upward module
@@ -338,12 +340,55 @@ function resumeCommand(args, repo) {
   } finally { store.close() }
 }
 
+// `doctor --models`: resolved model per CLI per tier (registry + overrides + aliases), so a stale
+// pin is visible without reading config files. Optional per-CLI/alias `modelListCmd` is run
+// (best-effort) to flag a resolved model missing from the CLI's own model list.
+function doctorModelsCommand(args, context) {
+  const registry = buildRegistry(context.config)
+  const enabled = (context.config.enabled ?? Object.keys(registry)).filter((cli) => Object.hasOwn(registry, cli))
+  const tiers = ['simple', 'moderate', 'complex', 'expert']
+  const rows = enabled.map((cli) => {
+    const row = { cli }
+    for (const tier of tiers) {
+      try { row[tier] = resolveRoute({ cli, model_tier: tier, files: [], description: '', prompt: '' }, context.config).model }
+      catch { row[tier] = '—' }
+    }
+    return row
+  })
+  const warnings = []
+  for (const row of rows) {
+    const listCmd = registry[row.cli]?.modelListCmd
+    if (!listCmd) continue
+    let output = ''
+    try { output = execSync(listCmd, { timeout: 10000, encoding: 'utf8' }) } catch { continue }
+    for (const tier of tiers) {
+      const model = row[tier]
+      if (model && model !== '—' && !output.includes(model)) warnings.push(`⚠ ${row.cli}: model "${model}" not in \`${listCmd}\` output`)
+    }
+  }
+  if (has(args, '--json')) {
+    console.log(JSON.stringify(Object.fromEntries(rows.map(({ cli, ...tierModels }) => [cli, tierModels])), null, 2))
+  } else {
+    console.log([renderModels(rows), ...warnings].join('\n'))
+  }
+  return EXIT.OK
+}
+
 function doctorCommand(args, repo, explain = false, task = {}) {
   const context = loadContext(repo, args), manager = new WorkerManager({ ...context.config, repo }), store = openRepoStore(repo)
   try {
+    if (explain) {
+      const probes = manager.probes(context.config.enabled)
+      console.log(JSON.stringify(routeTask(task, { manager, store, enabled: context.config.enabled, probes }), null, 2)); return EXIT.OK
+    }
+    if (has(args, '--models')) return doctorModelsCommand(args, context)
     const probes = manager.probes(context.config.enabled)
-    if (explain) { console.log(JSON.stringify(routeTask(task, { manager, store, enabled: context.config.enabled, probes }), null, 2)); return EXIT.OK }
-    console.log(has(args, '--json') ? JSON.stringify({ policy: context.policy, gates: context.gates, workers: probes }, null, 2) : renderDoctor(context.policy, context.gates, probes))
+    const metrics = store.getMetrics()
+    if (has(args, '--json')) {
+      console.log(JSON.stringify({ policy: context.policy, gates: context.gates, workers: probes, metrics }, null, 2))
+    } else {
+      console.log([renderDoctor(context.policy, context.gates, probes), renderMetrics(metrics)].filter(Boolean).join('\n\n'))
+    }
     return probes.filter((probe) => probe.healthy).length >= context.policy.minimumHealthyWorkers ? EXIT.OK : EXIT.BLOCKED
   } finally { store.close(); manager.close() }
 }
@@ -373,6 +418,61 @@ function exportCommand(args, repo) {
   } finally { store.close() }
 }
 
+// Emits the run's failed/blocked tasks as a plan JSON, ready for `run --plan-file -` — so a
+// partially-failed run's surviving tasks never need to be retyped by hand.
+function replanCommand(args, repo) {
+  if (!args[0]) throw Object.assign(new Error('replan requires a run id'), { code: 'USAGE' })
+  const store = openRepoStore(repo)
+  try {
+    const runId = resolveRunId(store, args[0])
+    const run = store.getRun(runId)
+    if (!run) throw Object.assign(new Error(`run not found: ${runId}`), { code: 'USAGE' })
+    const plan = JSON.parse(run.plan_json)
+    const statusByTaskId = new Map(store.getTasks(runId).map((t) => [t.task_id, t.status]))
+    const tasks = plan.tasks.filter((t) => ['failed', 'blocked'].includes(statusByTaskId.get(t.id)))
+    if (!tasks.length) { console.error(`run ${runId}: no failed or blocked tasks to replan`); return EXIT.OK }
+    console.log(JSON.stringify({ tasks }, null, 2))
+    return EXIT.OK
+  } finally { store.close() }
+}
+
+// `ultraswarm add-cli <name> --binary <bin> [--extends <builtin>] [--model <id>]`: onboard a new
+// CLI as a config alias without hand-writing the models/invocation shape (Feature G). Probes the
+// binary (best-effort — a warning, not a hard failure, since the alias may target another
+// machine), builds the minimal valid alias skeleton, and merges+validates it into the project
+// config, refusing to clobber an existing alias.
+function addCliCommand(args, repo) {
+  const name = args[0]
+  if (!name || name.startsWith('--')) throw Object.assign(new Error('add-cli requires a name: add-cli <name> --binary <bin> [--extends <builtin>] [--model <id>]'), { code: 'USAGE' })
+  if (Object.hasOwn(DEFAULT_REGISTRY, name)) throw Object.assign(new Error(`add-cli: "${name}" collides with the built-in CLI "${name}"; use overrides to tune built-ins, add-cli to add new ones`), { code: 'USAGE' })
+  const binary = value(args, '--binary')
+  const extendsCli = value(args, '--extends')
+  if (!binary && !extendsCli) throw Object.assign(new Error('add-cli requires --binary <bin> (or --extends a built-in CLI to inherit one)'), { code: 'USAGE' })
+  if (extendsCli && !Object.hasOwn(DEFAULT_REGISTRY, extendsCli)) throw Object.assign(new Error(`add-cli: --extends must reference a built-in CLI; got "${extendsCli}"`), { code: 'USAGE' })
+  const model = value(args, '--model') ?? 'default'
+  const probeBinary = binary ?? extendsCli
+  try { execFileSync(probeBinary, ['--version'], { timeout: 10000, stdio: 'ignore' }) }
+  catch (e) { console.error(`add-cli: preflight could not verify "${probeBinary} --version" (${e.message}); continuing — the alias may target a machine that has it later. Verify later with: ultraswarm preflight`) }
+  const alias = {
+    ...(extendsCli ? { extends: extendsCli } : {}),
+    ...(binary ? { binary } : {}),
+    models: { simple: { model, invocation: `${probeBinary} "$(cat .ultraswarm-prompt.txt)"` } },
+  }
+  const configPath = path.join(repo, 'ultraswarm.config.json')
+  let config = {}
+  if (fs.existsSync(configPath)) {
+    try { config = JSON.parse(fs.readFileSync(configPath, 'utf8')) }
+    catch (e) { throw Object.assign(new Error(`invalid config ${configPath}: ${e.message}`), { code: 'USAGE' }) }
+  }
+  if (config.aliases?.[name]) throw Object.assign(new Error(`add-cli: aliases.${name} already exists in ${configPath}`), { code: 'USAGE' })
+  const merged = { ...config, aliases: { ...(config.aliases || {}), [name]: alias } }
+  const check = validateConfig(merged)
+  if (!check.valid) throw Object.assign(new Error(`add-cli: invalid resulting config: ${check.errors.join('; ')}`), { code: 'USAGE' })
+  fs.writeFileSync(configPath, `${JSON.stringify(merged, null, 2)}\n`)
+  console.log(`added alias "${name}" to ultraswarm.config.json — verify with: ultraswarm preflight`)
+  return EXIT.OK
+}
+
 export async function commandMain(argv = process.argv.slice(2), repo = process.cwd()) {
   if (argv.includes('--no-color')) process.env.NO_COLOR = '1'   // disable ANSI before any output
   let args = [...argv], command = args.shift()
@@ -392,6 +492,8 @@ export async function commandMain(argv = process.argv.slice(2), repo = process.c
   if (command === 'preflight') return preflightCommand(args, repo)
   if (command === 'explain-routing') return doctorCommand(args, repo, true, { description: args.join(' '), prompt: args.join(' '), files: [] })
   if (command === 'export') return exportCommand(args, repo)
+  if (command === 'replan') return replanCommand(args, repo)
+  if (command === 'add-cli') return addCliCommand(args, repo)
   throw Object.assign(new Error(`unknown command: ${command}`), { code: 'USAGE' })
 }
 

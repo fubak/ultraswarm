@@ -174,3 +174,80 @@ test('cleanupPerTaskWorktrees removes per-task worktrees and branches but keeps 
   assert.equal(fs.existsSync(taskWt), false)
   assert.equal(fs.existsSync(intWt), true)
 })
+
+// Feature G: replan emits exactly the failed/blocked tasks from a run's stored plan, so a
+// partially-failed run's surviving work never needs to be retyped by hand.
+test('replan emits only the failed and blocked tasks from the stored plan', async () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'us-cli-'))
+  const store = openRepoStore(repo)
+  const plan = { tasks: [{ id: 't1', description: 'one' }, { id: 't2', description: 'two' }, { id: 't3', description: 'three' }] }
+  store.createRun({ id: 'r1', repo, baseSha: 'base', plan, policy: resolvePolicy(), waves: [[{ id: 't1' }, { id: 't2' }, { id: 't3' }]] })
+  store.updateTask('r1', 't1', 'failed')
+  store.updateTask('r1', 't2', 'blocked')
+  store.updateTask('r1', 't3', 'integrated')
+  store.close()
+  const { result, out } = await captureLog(() => commandMain(['replan', 'r1'], repo))
+  assert.equal(result, EXIT.OK)
+  const parsed = JSON.parse(out)
+  assert.deepEqual(parsed.tasks.map((t) => t.id).sort(), ['t1', 't2'])
+})
+
+test('replan with nothing to replan prints a message to stderr and exits OK', async () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'us-cli-'))
+  const store = openRepoStore(repo)
+  const plan = { tasks: [{ id: 't1', description: 'one' }] }
+  store.createRun({ id: 'r1', repo, baseSha: 'base', plan, policy: resolvePolicy(), waves: [[{ id: 't1' }]] })
+  store.updateTask('r1', 't1', 'integrated')
+  store.close()
+  const origError = console.error, errors = []
+  console.error = (...a) => errors.push(a.join(' '))
+  let result
+  try { result = await commandMain(['replan', 'r1'], repo) } finally { console.error = origError }
+  assert.equal(result, EXIT.OK)
+  assert.match(errors.join('\n'), /no failed or blocked tasks to replan/)
+})
+
+test('replan requires a run id and rejects an unknown one, both as USAGE', async () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'us-cli-'))
+  await assert.rejects(() => commandMain(['replan'], repo), (e) => e.code === 'USAGE')
+  await assert.rejects(() => commandMain(['replan', 'nope'], repo), (e) => e.code === 'USAGE')
+})
+
+// Feature G: add-cli onboards a new CLI as a config alias without hand-writing the models shape.
+test('add-cli writes a valid alias into ultraswarm.config.json', async () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'us-cli-'))
+  const { result, out } = await captureLog(() => commandMain(['add-cli', 'my-tool', '--binary', 'node', '--model', 'my-model'], repo))
+  assert.equal(result, EXIT.OK)
+  assert.match(out, /added alias "my-tool"/)
+  const config = JSON.parse(fs.readFileSync(path.join(repo, 'ultraswarm.config.json'), 'utf8'))
+  assert.equal(config.aliases['my-tool'].binary, 'node')
+  assert.equal(config.aliases['my-tool'].models.simple.model, 'my-model')
+  assert.match(config.aliases['my-tool'].models.simple.invocation, /\.ultraswarm-prompt\.txt/)
+})
+
+test('add-cli refuses to collide with a built-in CLI name', async () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'us-cli-'))
+  await assert.rejects(() => commandMain(['add-cli', 'codex', '--binary', 'node'], repo), (e) => e.code === 'USAGE')
+})
+
+test('add-cli refuses to clobber an existing alias', async () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'us-cli-'))
+  fs.writeFileSync(path.join(repo, 'ultraswarm.config.json'), JSON.stringify({ aliases: { 'my-tool': { binary: 'node', models: { simple: { model: 'x', invocation: 'node "$(cat .ultraswarm-prompt.txt)"' } } } } }))
+  await assert.rejects(() => commandMain(['add-cli', 'my-tool', '--binary', 'node'], repo), (e) => e.code === 'USAGE')
+})
+
+test('add-cli requires --binary or --extends', async () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'us-cli-'))
+  await assert.rejects(() => commandMain(['add-cli', 'my-tool'], repo), (e) => e.code === 'USAGE')
+})
+
+// Feature F: doctor --models --json resolves the model per CLI per tier from the registry.
+test('doctor --models --json emits resolved models for codex tiers', async () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'us-cli-'))
+  execSync('git init -q && git config user.email t@t && git config user.name t && git commit -q --allow-empty -m seed', { cwd: repo, shell: '/bin/bash' })
+  const { result, out } = await captureLog(() => commandMain(['doctor', '--models', '--json'], repo))
+  assert.equal(result, EXIT.OK)
+  const parsed = JSON.parse(out)
+  assert.equal(parsed.codex.simple, 'gpt-5.4-mini')
+  assert.equal(parsed.codex.moderate, 'gpt-5.4')
+})

@@ -4,6 +4,60 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.6.0] - 2026-07-02
+
+### Added
+- **Run report ends with a `TOKENS BY CLI / MODEL / EFFORT` table** (`lib/orchestrator/report.mjs`,
+  `lib/llm/estimate.mjs`). Columns: `CLI | model | effort | est. | used | Δ | attempts`, plus a
+  total row. `est.` prefers the measured per-(cli, model, effort, tier) average persisted in
+  `route_calibration` (new sqlite table, schema v3), self-correcting as real runs accumulate; it
+  falls back to a static tier curve (simple 10k / moderate 30k / complex 75k / expert 150k) when no
+  calibration data exists yet. `used` is exclusively structured usage summed across every attempt
+  in that bucket — `—` when a CLI reported none, never backfilled from the estimate (the v3.5.13
+  honesty invariant extends to this table).
+- **Attempts record the resolved model id, tier, and effort, not just the tier-as-model.**
+  `lib/state/store.mjs` migration v3 adds `attempts.tier`/`attempts.effort` (additive; a v2 db
+  upgrades in place). `implement.mjs` resolves the full route once and passes model/tier/effort to
+  `startAttempt`; failed attempts now record their burned tokens too, and the runner's
+  `recordCalibration` accumulates them per route. The legacy `cfg.registry` path keeps
+  tier-as-model, since no route info exists there.
+- **Declarative `usage` descriptors** (`lib/workers/adapters.mjs`): `parseUsage(text, descriptors)`
+  is now descriptor-driven — `{ input, output, cost? }` dot-paths evaluated against both parsed
+  JSONL lines and whole-stdout JSON (gemini emits one object, not JSONL), with a `*` wildcard for
+  keyed maps (`stats.models.*.tokens.prompt`). `DEFAULT_REGISTRY` gains `usage` for codex, opencode,
+  and gemini; gemini invocations now pass `--output-format json`. `overrides.<cli>.usage` and
+  `aliases.<name>.usage` are validated (array of `{input, output, cost?}` objects) and let an
+  operator add or override a descriptor for any CLI. Real-usage CLIs: codex, opencode, gemini
+  (3 of 10 built-ins).
+- **Worker cost derived from configured pricing when a CLI doesn't self-report it.**
+  `implement.mjs` falls back to `priceUsd(resolvedModel, usage, config)` —
+  `config.intelligence.pricing[model]` (USD per million tokens), built-in Claude rates, else 0 — so
+  `maxCostUsd` bounds spend even for CLIs with no native cost field.
+- **CAPABILITIES dedupe**: `strengths`/`structuredOutput`/`resume` moved into `DEFAULT_REGISTRY`
+  entries; the parallel `CAPABILITIES` map is deleted and `capabilities()` derives from the
+  effective (alias-resolved) registry.
+- **Routing feedback from measured outcomes.** `decompose(..., { metrics })` appends each worker's
+  aggregated `worker_metrics` win rate to its roster line (`codex (backend…; 12 runs, 92% pass)`);
+  `runCommand` opens the store before planning so `--decompose` sees it. `doctor` renders a new
+  `WORKER TRACK RECORD` table (`renderMetrics`) and includes `metrics` in `--json`.
+- **`doctor --models`** (`lib/render.mjs` `renderModels`): prints the resolved model per CLI per
+  tier (registry + overrides + aliases). An optional per-registry-entry/alias `modelListCmd` is run
+  best-effort and warns when a resolved model is absent from the CLI's own model list. No built-in
+  `modelListCmd` defaults — unverifiable per CLI.
+- **`ultraswarm replan <runId>`**: reads the stored plan and the run's task statuses, and emits a
+  `{ tasks: [...] }` JSON of just the failed/blocked tasks, ready for `run --plan-file -`.
+- **`ultraswarm add-cli <name> --binary <bin> [--extends <builtin>] [--model <id>]`**: best-effort
+  probes the binary (`--version`), builds a minimal valid alias skeleton, validates it with
+  `validateConfig`, and merges it into the project `ultraswarm.config.json` — refusing to clobber an
+  existing alias or collide with a built-in CLI name. `hosts/host-contract.json` gains both new
+  commands; host skills regenerated.
+- **Prompt efficiency** (`lib/prompts.mjs`): `capWorkerPrompt(text, max = 64_000)` hard-caps worker
+  prompts with an explicit `[ultraswarm: truncated N chars]` marker (logged, never silent); retry
+  feedback is capped to the last 10 items at 500 chars each, and `runRoutineTask` now includes the
+  prior rejected attempt's changed files so a retry converges instead of re-exploring.
+- **Ledger guard**: the report prints a loud `⚠ LEDGER MISMATCH` line (red) when
+  `merged + failed + blocked` task rows don't reconcile with the plan's task count.
+
 ## [3.5.18] - 2026-06-22
 
 ### Added

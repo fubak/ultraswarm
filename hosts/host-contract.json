@@ -2,7 +2,7 @@
   "version": 1,
   "runner": "bin/ultraswarm.mjs",
   "node": ">=22",
-  "commands": ["run", "merge", "status", "logs", "cancel", "resume", "preflight", "doctor", "workers", "explain-routing", "export"],
+  "commands": ["run", "merge", "status", "logs", "cancel", "resume", "preflight", "doctor", "workers", "explain-routing", "export", "replan", "add-cli"],
   "approvals": ["plan", "merge"],
   "hosts": {
     "claude": { "skill": "skills/ultraswarm/SKILL.md", "invocation": "/ultraswarm" },

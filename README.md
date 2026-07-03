@@ -5,6 +5,51 @@ Cursor Agent, Grok, and shell usage. One standalone Node runner owns decompositi
 routing, process supervision, isolated Git worktrees, adaptive review,
 transactional integration, approvals, recovery, and reporting.
 
+## What's New In v3.6.0
+
+The run report now ends with an estimated-vs-used token breakdown by CLI, model, and effort, and
+the CLI gained onboarding/recovery commands:
+
+- **`TOKENS BY CLI / MODEL / EFFORT` table closes every report** — `CLI | model | effort | est. |
+  used | Δ | attempts`, plus a total row. `est.` is a calibration-informed heuristic: ultraswarm
+  prefers the measured per-(CLI, model, effort) average persisted in `.ultraswarm/state.sqlite`
+  (`route_calibration`, self-correcting across runs) and falls back to a static tier curve (simple
+  10k / moderate 30k / complex 75k / expert 150k tokens) until enough runs accumulate. `used` is
+  ONLY structured usage summed across attempts — `—` when a CLI reports none, never backfilled from
+  the estimate (the v3.5.13 honesty invariant still holds).
+- **Attempts now record the resolved model id, tier, and effort**, not just the tier where "model"
+  used to live (schema migration v3, additive — existing v2 databases upgrade in place). Failed
+  attempts record their burned tokens too, so a rejected retry still counts toward the table above.
+  When a CLI doesn't self-report cost, worker spend is now priced from
+  `config.intelligence.pricing[model]` (USD per million tokens; falls back to built-in Claude
+  rates, else 0 for an unpriced model) so `maxCostUsd` can actually bound external worker spend.
+- **Declarative usage capture widens real token reporting from 2 built-ins to 3.** Each registry
+  entry can now declare a `usage` array of `{ input, output, cost? }` dot-path descriptors (with a
+  `*` wildcard for keyed maps), evaluated against structured worker output; `overrides.<cli>.usage`
+  and `aliases.<name>.usage` let you add or override a descriptor for a CLI without a built-in
+  parser. Gemini now runs with `--output-format json` and its `stats.models.*.tokens.*` usage is
+  captured, joining codex and opencode as real-usage CLIs.
+- **Routing feedback** — `--decompose` planning and `doctor` now show each worker's measured track
+  record (`codex (backend…; 12 runs, 92% pass)`) pulled from `worker_metrics`, so the brain and the
+  operator both see what has actually been working, not just declared specialties.
+- **`doctor --models`** prints the resolved model per CLI per tier (registry + overrides +
+  aliases), so a stale model pin is visible without reading config files; an optional
+  `modelListCmd` per registry entry/alias warns when a resolved model is missing from the CLI's own
+  model list.
+- **`ultraswarm replan <runId>`** emits a plan JSON of a run's failed/blocked tasks, ready to feed
+  straight back into `run --plan-file -` — a partially-failed run's surviving tasks never need to be
+  retyped by hand.
+- **`ultraswarm add-cli <name> --binary <bin> [--extends <builtin>] [--model <id>]`** onboards a new
+  CLI in one command: probes the binary, builds a valid alias skeleton, and merges + validates it
+  into `ultraswarm.config.json`, refusing to clobber an existing alias.
+- **Prompt efficiency** — worker prompts are hard-capped at 64k chars with a loud
+  `[ultraswarm: truncated N chars]` marker instead of silently growing; retry feedback is bounded to
+  the last 10 rejected attempts (500 chars each) and now names the files the rejected attempt
+  changed, so a retry converges instead of re-exploring from scratch.
+- **Ledger guard** — the report now prints a loud `⚠ LEDGER MISMATCH` line if the merged/failed/
+  blocked task rows don't add up to the plan's task count, instead of printing plausible-looking
+  numbers that quietly don't reconcile.
+
 ## What's New In v3.5.18
 
 Run-output polish:
@@ -346,6 +391,21 @@ retry/competition `overhead`) read from each CLI's structured usage. The headlin
 implementation ran on external CLIs, off your Claude context; Claude only orchestrated and reviewed
 (see [token reporting](#state-and-safety)).
 
+The report **ends** with an estimated-vs-used breakdown by CLI, model, and effort level:
+
+```text
+Tokens by CLI / model / effort
+
+CLI     model           effort     est.    used    Δ  attempts
+──────  ──────────────  ──────  ───────  ──────  ───  ────────
+codex   gpt-5.4-mini    low      45,200  41,830  -7%         6
+gemini  gemini-2.5-pro  medium   62,000       —    —         2
+Total                           107,200  41,830  -7%         8
+```
+
+`est.` is a calibration-informed heuristic and `used` is only structured usage — see
+[State And Safety](#state-and-safety) for how each is derived.
+
 Per-task and integration worktrees are created under `<repo>/.ultraswarm/worktrees` (gitignored).
 Because a fresh worktree checks out tracked files only (no `node_modules`), the runner installs
 dependencies in each worktree before gates run — inferred from the lockfile (`pnpm-lock.yaml` →
@@ -386,10 +446,12 @@ node ~/projects/ultraswarm/bin/ultraswarm.mjs resume <run-id>
 | `logs <id>` | Read append-only events |
 | `cancel <id>` | Terminate worker process trees |
 | `resume <id>` | Recover awaiting-merge or stale-base state |
-| `doctor` | Validate policy, gates, and worker health |
+| `doctor` | Validate policy, gates, and worker health; `--models` shows resolved model per CLI per tier |
 | `workers` | Show worker health and capabilities |
 | `explain-routing <task>` | Explain worker rankings |
 | `export <id>` | Export run provenance as JSON |
+| `replan <runId>` | Emit a plan JSON of a run's failed/blocked tasks, for `run --plan-file -` |
+| `add-cli <name> --binary <bin>` | Probe, validate, and write a new CLI alias into `ultraswarm.config.json` |
 
 `preflight`, `run` (plan preview), `status`, `doctor`, and `workers` print human-readable
 tables by default; add `--json` for machine-readable output. By default `run` functionally
@@ -468,6 +530,15 @@ you run several local models, each tuned for a job, through one CLI binary:
   never handed work it can't do.
 - **Opt-in only:** nothing is auto-generated. An alias exists only if you declare it, and is
   active only when it appears in `enabled` (or when `enabled` is omitted entirely).
+- **`usage`:** if your CLI emits structured usage in a shape ultraswarm doesn't already parse, add
+  `"usage": [{ "input": "usage.input_tokens", "output": "usage.output_tokens", "cost": "usage.cost" }]`
+  (dot-paths into the worker's parsed JSON output; `cost` is optional; a `*` path segment matches
+  every key in a map, e.g. `stats.models.*.tokens.prompt`). Also settable per built-in via
+  `overrides.<cli>.usage`. Without a matching descriptor the report honestly shows "not reported"
+  for that CLI rather than guessing.
+
+New CLIs don't need a hand-written alias block — `ultraswarm add-cli <name> --binary <bin>
+[--extends <builtin>] [--model <id>]` probes the binary and writes a valid skeleton alias for you.
 
 ## SmallHarness Worker
 
@@ -605,7 +676,9 @@ in `ultraswarm.config.json` (see `ultraswarm.config.advanced.json`).
 - Logs redact common credential assignments and rotate at the output limit.
 - Task contracts run commands and reject changes outside `allowed_paths`.
 - `.ultraswarm/` is ignored by Git and contains SQLite state, worker logs, the functional-probe cache, and per-task worktrees.
-- Token usage is read only from a worker's **structured** output (codex `exec --json`, opencode `run --format json`) — never a text scrape. A worker invoked without its JSON flag, or one with no usage parser yet (gemini/grok/agy/droid/pi), runs fine and the report honestly says "Token/cost usage: not reported", never a fabricated number. The figures are usage estimates, not a billing source of truth.
+- Token usage is read only from a worker's **structured** output (codex `exec --json`, opencode `run --format json`, gemini `--output-format json`) via declarative `usage` descriptors — never a text scrape. A worker invoked without its JSON flag, or one with no usage descriptor yet (grok/agy/droid/pi, unless you add one via `overrides.<cli>.usage`), runs fine and the report honestly says "Token/cost usage: not reported", never a fabricated number. The figures are usage estimates, not a billing source of truth.
+- The report's closing `TOKENS BY CLI / MODEL / EFFORT` table's `est.` column is a heuristic: it prefers a self-correcting per-(CLI, model, effort) average recorded in `.ultraswarm/state.sqlite` once enough runs have reported real usage, and falls back to a static tier curve (simple 10k / moderate 30k / complex 75k / expert 150k tokens) until then. `used` follows the same structured-usage-only rule as above.
+- When a worker doesn't self-report cost, ultraswarm derives it from parsed token counts × `config.intelligence.pricing[model]` (USD per million tokens; falls back to built-in Claude rates, else 0), so `maxCostUsd` can bound external worker spend even for CLIs with no native cost field.
 - v2 JSONL journals remain readable files but cannot be resumed as v3 runs.
 
 ## Development
