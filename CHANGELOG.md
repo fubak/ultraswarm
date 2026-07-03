@@ -4,6 +4,15 @@ All notable changes to ultraswarm are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.6.1] - 2026-07-03
+
+### Fixed
+- **`est.` snapshots calibration at run START** (`lib/orchestrator/runner.mjs`). The v3.6.0 report
+  computed estimates after the run, by which point the run's own measured usage had landed in
+  `route_calibration` — so a first calibrated run's Δ was self-fulfilling (~0%). `runSwarm` now
+  snapshots calibration before any attempt runs and `computeRouteUsage(cfg, snapshot)` uses it;
+  found by live scenario verification of the v3.6.0 release.
+
 ## [3.6.0] - 2026-07-02
 
 ### Added
