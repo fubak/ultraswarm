@@ -58,7 +58,13 @@ function brain() {
 }
 
 function loadContext(repo, args = []) {
-  const config = loadConfig()
+  // Resolve the project config relative to the repo the runner operates on, not the caller's cwd.
+  // The runner's own config writer (`add-cli`) writes ultraswarm.config.json into the repo, and every
+  // other repo-scoped input (gates, worktrees, store) resolves from `repo` — the config should travel
+  // with the repo too. In normal CLI use repo === process.cwd(), so this is behavior-identical; it
+  // also keeps `commandMain(..., tempRepo)` test callers from accidentally reading a config that sits
+  // in the caller's working directory.
+  const config = loadConfig({ projectPath: path.join(repo, 'ultraswarm.config.json') })
   const configCheck = validateConfig(config)
   if (!configCheck.valid) throw new Error(`invalid config: ${configCheck.errors.join('; ')}`)
   const policy = resolvePolicy(config)
